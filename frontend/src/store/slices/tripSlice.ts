@@ -37,6 +37,14 @@ const initialState: TripState = {
   error: null,
 };
 
+export const fetchTrips = createAsyncThunk(
+  'trip/fetchTrips',
+  async () => {
+    const response = await axios.get(`${API_URL}/api/trips/`);
+    return response.data;
+  }
+);
+
 export const createTrip = createAsyncThunk(
   'trip/createTrip',
   async (tripData: Omit<Trip, 'id' | 'status' | 'stops' | 'log_sheets'>) => {
@@ -47,16 +55,26 @@ export const createTrip = createAsyncThunk(
 
 export const planRoute = createAsyncThunk(
   'trip/planRoute',
-  async ({ tripId, mapboxToken }: { tripId: number; mapboxToken: string }) => {
+  async ({ tripId }: { tripId: number }) => {
     const response = await axios.post(
-      `${API_URL}/api/trips/${tripId}/plan_route/`,
-      {},
-      {
-        headers: {
-          'X-Mapbox-Token': mapboxToken,
-        },
-      }
+      `${API_URL}/api/trips/${tripId}/plan_route/`
     );
+    return response.data;
+  }
+);
+
+export const fetchTripStops = createAsyncThunk(
+  'trip/fetchTripStops',
+  async (tripId: number) => {
+    const response = await axios.get(`${API_URL}/api/trips/${tripId}/stops/`);
+    return response.data;
+  }
+);
+
+export const createTripStop = createAsyncThunk(
+  'trip/createTripStop',
+  async ({ tripId, stopData }: { tripId: number; stopData: any }) => {
+    const response = await axios.post(`${API_URL}/api/trips/${tripId}/stops/`, stopData);
     return response.data;
   }
 );
@@ -71,6 +89,18 @@ const tripSlice = createSlice({
   },
   extraReducers: (builder) => {
     builder
+      .addCase(fetchTrips.pending, (state) => {
+        state.loading = true;
+        state.error = null;
+      })
+      .addCase(fetchTrips.fulfilled, (state, action) => {
+        state.loading = false;
+        state.trips = action.payload;
+      })
+      .addCase(fetchTrips.rejected, (state, action) => {
+        state.loading = false;
+        state.error = action.error.message || 'Failed to fetch trips';
+      })
       .addCase(createTrip.pending, (state) => {
         state.loading = true;
         state.error = null;
@@ -101,6 +131,16 @@ const tripSlice = createSlice({
       .addCase(planRoute.rejected, (state, action) => {
         state.loading = false;
         state.error = action.error.message || 'Failed to plan route';
+      })
+      .addCase(fetchTripStops.fulfilled, (state, action) => {
+        if (state.currentTrip) {
+          state.currentTrip.stops = action.payload;
+        }
+      })
+      .addCase(createTripStop.fulfilled, (state, action) => {
+        if (state.currentTrip) {
+          state.currentTrip.stops.push(action.payload);
+        }
       });
   },
 });
