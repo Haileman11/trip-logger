@@ -3,7 +3,7 @@ import { useParams, Link } from 'react-router-dom';
 import { useDispatch, useSelector } from 'react-redux';
 import { MapContainer, TileLayer, Marker, Popup, Polyline } from 'react-leaflet';
 import { Icon, LatLngBounds, latLng } from 'leaflet';
-import { setCurrentTrip } from '../store/slices/tripSlice';
+import { Trip, Stop, setCurrentTrip } from '../store/slices/tripSlice';
 import type { RootState, AppDispatch } from '../store';
 import 'leaflet/dist/leaflet.css';
 
@@ -12,11 +12,11 @@ import 'leaflet/dist/leaflet.css';
 const TripDetails = () => {
   const { id } = useParams<{ id: string }>();
   const dispatch = useDispatch<AppDispatch>();
-  const { trips, currentTrip, loading, error } = useSelector((state: RootState) => state.trip);
+  const { trips, currentTrip, loading, error } = useSelector((state: RootState) => state.trips);
 
   useEffect(() => {
     if (id) {
-      const trip = trips.find(t => t.id === parseInt(id));
+      const trip = trips.find((t: Trip) => t.id === parseInt(id));
       if (trip) {
         dispatch(setCurrentTrip(trip));
       }
@@ -28,16 +28,25 @@ const TripDetails = () => {
   const getBounds = () => {
     if (!currentTrip) return undefined;
     
-    const points = [
-      latLng(currentTrip.current_location.latitude, currentTrip.current_location.longitude),
-      latLng(currentTrip.pickup_location.latitude, currentTrip.pickup_location.longitude),
-      latLng(currentTrip.dropoff_location.latitude, currentTrip.dropoff_location.longitude),
-      ...(currentTrip.stops?.map(stop => 
-        latLng(stop.location.latitude, stop.location.longitude)
-      ) || [])
-    ];
+    const points = [];
     
-    return new LatLngBounds(points);
+    if (currentTrip.current_location) {
+      points.push(latLng(currentTrip.current_location.latitude, currentTrip.current_location.longitude));
+    }
+    if (currentTrip.pickup_location) {
+      points.push(latLng(currentTrip.pickup_location.latitude, currentTrip.pickup_location.longitude));
+    }
+    if (currentTrip.dropoff_location) {
+      points.push(latLng(currentTrip.dropoff_location.latitude, currentTrip.dropoff_location.longitude));
+    }
+    
+    if (currentTrip.stops) {
+      points.push(...currentTrip.stops.map((stop: Stop) => 
+        latLng(stop.location.latitude, stop.location.longitude)
+      ));
+    }
+    
+    return points.length > 0 ? new LatLngBounds(points) : undefined;
   };
 
   // ... rest of the component ...

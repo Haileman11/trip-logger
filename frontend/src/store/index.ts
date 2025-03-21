@@ -1,5 +1,5 @@
 import { configureStore } from '@reduxjs/toolkit';
-import tripReducer from './tripSlice';
+import tripReducer from './slices/tripSlice';
 import logReducer from './logSlice';
 
 export const store = configureStore({

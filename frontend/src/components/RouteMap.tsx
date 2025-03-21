@@ -3,7 +3,7 @@ import { MapContainer, TileLayer, Marker, Popup, Polyline, useMap } from 'react-
 import 'leaflet/dist/leaflet.css';
 import L from 'leaflet';
 import ErrorBoundary from './ErrorBoundary';
-import { useAppDispatch, useAppSelector } from '../hooks';
+
 import { leafletIcons } from '../utils/leaflet-icons';
 
 // Fix for default marker icons in React-Leaflet
@@ -70,32 +70,46 @@ const RouteMap = ({ route, stops, currentLocation }: RouteMapProps) => {
     loadMap();
   }, []);
 
-  console.log('RouteMap props:', { route, stops, currentLocation });
-  
+  // Validate coordinates
+  const isValidCoordinate = (lat: number, lng: number) => {
+    return !isNaN(lat) && !isNaN(lng) && lat >= -90 && lat <= 90 && lng >= -180 && lng <= 180;
+  };
+
+  // Default coordinates if invalid
+  const defaultLat = 9.0248826;  // Addis Ababa coordinates
+  const defaultLng = 38.7807792;
+
+  const safeCurrentLocation = {
+    latitude: isValidCoordinate(currentLocation.latitude, currentLocation.longitude) 
+      ? currentLocation.latitude 
+      : defaultLat,
+    longitude: isValidCoordinate(currentLocation.latitude, currentLocation.longitude) 
+      ? currentLocation.longitude 
+      : defaultLng
+  };
+
   const routeCoordinates = useMemo(() => 
-    route?.routes?.[0]?.geometry?.coordinates?.map((coord) => [
-      coord[1],
-      coord[0]
-    ] as L.LatLngTuple) || [], 
+    route?.routes?.[0]?.geometry?.coordinates?.map((coord) => {
+      const [lng, lat] = coord;
+      return isValidCoordinate(lat, lng) 
+        ? [lat, lng] as L.LatLngTuple 
+        : [defaultLat, defaultLng] as L.LatLngTuple;
+    }) || [], 
     [route]
   );
-  
-  console.log('Route coordinates:', routeCoordinates);
   
   const bounds = useMemo(() => {
     if (routeCoordinates.length > 0) {
       return L.latLngBounds(routeCoordinates);
     }
     return L.latLngBounds(
-      [currentLocation.latitude, currentLocation.longitude] as L.LatLngTuple,
-      [currentLocation.latitude, currentLocation.longitude] as L.LatLngTuple
+      [safeCurrentLocation.latitude, safeCurrentLocation.longitude] as L.LatLngTuple,
+      [safeCurrentLocation.latitude, safeCurrentLocation.longitude] as L.LatLngTuple
     );
-  }, [routeCoordinates, currentLocation]);
-  
-  console.log('Map bounds:', bounds);
+  }, [routeCoordinates, safeCurrentLocation]);
 
   // Default center if no route coordinates
-  const defaultCenter: L.LatLngTuple = [currentLocation.latitude, currentLocation.longitude];
+  const defaultCenter: L.LatLngTuple = [safeCurrentLocation.latitude, safeCurrentLocation.longitude];
   const defaultZoom = 13;
 
   if (!isMapReady || !MapComponent) {
@@ -122,7 +136,7 @@ const RouteMap = ({ route, stops, currentLocation }: RouteMapProps) => {
           />
 
           {/* Current Location Marker */}
-          <Marker position={[currentLocation.latitude, currentLocation.longitude] as L.LatLngTuple}>
+          <Marker position={[safeCurrentLocation.latitude, safeCurrentLocation.longitude] as L.LatLngTuple}>
             <Popup>
               <div className="p-2">
                 <h3 className="font-semibold">Current Location</h3>
@@ -131,20 +145,26 @@ const RouteMap = ({ route, stops, currentLocation }: RouteMapProps) => {
           </Marker>
 
           {/* Stop Markers */}
-          {stops.map((stop, index) => (
-            <Marker
-              key={stop.id}
-              position={[stop.location.latitude, stop.location.longitude] as L.LatLngTuple}
-              icon={index === 0 ? leafletIcons.greenIcon : leafletIcons.redIcon}
-            >
-              <Popup>
-                <div className="p-2">
-                  <h3 className="font-semibold">{index === 0 ? 'Pickup' : 'Dropoff'} Stop</h3>
-                  <p className="text-sm">Arrival: {new Date(stop.arrival_time).toLocaleString()}</p>
-                </div>
-              </Popup>
-            </Marker>
-          ))}
+          {stops.map((stop, index) => {
+            const stopLat = stop.location.latitude;
+            const stopLng = stop.location.longitude;
+            if (!isValidCoordinate(stopLat, stopLng)) return null;
+            
+            return (
+              <Marker
+                key={stop.id}
+                position={[stopLat, stopLng] as L.LatLngTuple}
+                icon={index === 0 ? leafletIcons.greenIcon : leafletIcons.redIcon}
+              >
+                <Popup>
+                  <div className="p-2">
+                    <h3 className="font-semibold">{index === 0 ? 'Pickup' : 'Dropoff'} Stop</h3>
+                    <p className="text-sm">Arrival: {new Date(stop.arrival_time).toLocaleString()}</p>
+                  </div>
+                </Popup>
+              </Marker>
+            );
+          })}
 
           {/* Route Line */}
           {routeCoordinates.length > 0 && (

@@ -5,7 +5,7 @@ interface Location {
   longitude: number;
 }
 
-interface Stop {
+export interface Stop {
   location: Location;
   arrival_time?: string;
   departure_time?: string;
@@ -58,10 +58,48 @@ export const fetchTrip = createAsyncThunk(
   }
 );
 
+export const createTrip = createAsyncThunk(
+  'trips/createTrip',
+  async (tripData: Partial<Trip>) => {
+    const response = await fetch('/api/trips/', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(tripData),
+    });
+    if (!response.ok) {
+      throw new Error('Failed to create trip');
+    }
+    return response.json();
+  }
+);
+
+export const planRoute = createAsyncThunk(
+  'trips/planRoute',
+  async ({ tripId }: { tripId: number }) => {
+    const response = await fetch(`/api/trips/${tripId}/plan_route/`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      }
+    });
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      throw new Error(errorData.message || 'Failed to plan route');
+    }
+    return response.json();
+  }
+);
+
 const tripSlice = createSlice({
   name: 'trips',
   initialState,
-  reducers: {},
+  reducers: {
+    setCurrentTrip: (state, action) => {
+      state.currentTrip = action.payload;
+    }
+  },
   extraReducers: (builder) => {
     builder
       .addCase(fetchTrips.pending, (state) => {
@@ -87,8 +125,27 @@ const tripSlice = createSlice({
       .addCase(fetchTrip.rejected, (state, action) => {
         state.loading = false;
         state.error = action.error.message || 'Failed to fetch trip';
+      })
+      .addCase(planRoute.pending, (state) => {
+        state.loading = true;
+        state.error = null;
+      })
+      .addCase(planRoute.fulfilled, (state, action) => {
+        state.loading = false;
+        if (state.currentTrip) {
+          state.currentTrip = {
+            ...state.currentTrip,
+            stops: action.payload.stops,
+            status: 'planned'
+          };
+        }
+      })
+      .addCase(planRoute.rejected, (state, action) => {
+        state.loading = false;
+        state.error = action.error.message || 'Failed to plan route';
       });
   },
 });
 
+export const { setCurrentTrip } = tripSlice.actions;
 export default tripSlice.reducer; 

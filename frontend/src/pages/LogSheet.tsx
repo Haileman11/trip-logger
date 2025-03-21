@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { useDispatch, useSelector } from 'react-redux';
-import { updateLogSheet, fetchLogSheet } from '../store/slices/logSlice';
+import { updateLogSheet, fetchLogSheets } from '../store/logSlice';
 import DailyLogGrid from '../components/DailyLogGrid';
 import type { RootState, AppDispatch } from '../store';
 
@@ -10,8 +10,8 @@ type DutyStatus = 'offDuty' | 'sleeper' | 'driving' | 'onDuty';
 const LogSheet = () => {
   const { id } = useParams<{ id: string }>();
   const dispatch = useDispatch<AppDispatch>();
-  const { currentLogSheet, loading, error } = useSelector((state: RootState) => state.log);
-  const { currentTrip } = useSelector((state: RootState) => state.trip);
+  const { currentLogSheet, loading, error } = useSelector((state: RootState) => state.logs);
+  const { currentTrip } = useSelector((state: RootState) => state.trips);
   const [formData, setFormData] = useState({
     end_time: '',
     end_location: { latitude: 0, longitude: 0 },
@@ -20,7 +20,7 @@ const LogSheet = () => {
 
   useEffect(() => {
     if (id && currentTrip?.id) {
-      dispatch(fetchLogSheet({ tripId: currentTrip.id, logId: parseInt(id) }));
+      dispatch(fetchLogSheets(currentTrip.id.toString()));
     }
   }, [dispatch, id, currentTrip?.id]);
 
@@ -44,16 +44,15 @@ const LogSheet = () => {
     if (!id || !currentTrip?.id) return;
 
     try {
-      // Convert the datetime-local value back to ISO format
       const updatedData = {
         ...formData,
         end_time: formData.end_time ? new Date(formData.end_time).toISOString() : null,
       };
 
       await dispatch(updateLogSheet({
-        tripId: currentTrip.id,
-        logId: parseInt(id),
-        logData: updatedData,
+        tripId: currentTrip.id.toString(),
+        logId: id,
+        data: updatedData,
       })).unwrap();
     } catch (err) {
       console.error('Failed to update log sheet:', err);

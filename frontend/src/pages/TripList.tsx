@@ -1,12 +1,12 @@
 import { useEffect } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 import { Link } from 'react-router-dom';
-import { fetchTrips } from '../store/slices/tripSlice';
+import { fetchTrips, Trip } from '../store/slices/tripSlice';
 import type { RootState, AppDispatch } from '../store';
 
 const TripList = () => {
   const dispatch = useDispatch<AppDispatch>();
-  const { trips, loading, error } = useSelector((state: RootState) => state.trip);
+  const { trips, loading, error } = useSelector((state: RootState) => state.trips);
 
   useEffect(() => {
     dispatch(fetchTrips());
@@ -45,7 +45,7 @@ const TripList = () => {
         </div>
       ) : (
         <div className="grid gap-6">
-          {trips.map((trip) => (
+          {trips.map((trip: Trip) => (
             <div key={trip.id} className="card hover:shadow-md transition-shadow">
               <div className="flex justify-between items-start">
                 <div>
@@ -55,10 +55,12 @@ const TripList = () => {
                       <span className="font-medium">Status:</span>{' '}
                       <span className="capitalize">{trip.status}</span>
                     </p>
-                    <p className="text-gray-600">
-                      <span className="font-medium">Current Location:</span>{' '}
-                      {trip.current_location.latitude.toFixed(4)}, {trip.current_location.longitude.toFixed(4)}
-                    </p>
+                    {trip.current_location && (
+                      <p className="text-gray-600">
+                        <span className="font-medium">Current Location:</span>{' '}
+                        {trip.current_location.latitude.toFixed(4)}, {trip.current_location.longitude.toFixed(4)}
+                      </p>
+                    )}
                     <p className="text-gray-600">
                       <span className="font-medium">Cycle Hours:</span>{' '}
                       {trip.current_cycle_hours}

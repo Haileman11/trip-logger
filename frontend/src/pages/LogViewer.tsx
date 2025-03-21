@@ -1,16 +1,19 @@
 import { useEffect } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
-import { Link } from 'react-router-dom';
-import { fetchAllLogSheets } from '../store/slices/logSlice';
+import { Link, useParams } from 'react-router-dom';
+import { fetchLogSheets } from '../store/logSlice';
 import type { RootState, AppDispatch } from '../store';
 
 const LogViewer = () => {
   const dispatch = useDispatch<AppDispatch>();
-  const { logSheets, loading, error } = useSelector((state: RootState) => state.log);
+  const { tripId } = useParams<{ tripId: string }>();
+  const { logSheets, loading, error } = useSelector((state: RootState) => state.logs);
 
   useEffect(() => {
-    dispatch(fetchAllLogSheets());
-  }, [dispatch]);
+    if (tripId) {
+      dispatch(fetchLogSheets(tripId));
+    }
+  }, [dispatch, tripId]);
 
   if (loading) {
     return (
@@ -33,27 +36,27 @@ const LogViewer = () => {
   return (
     <div className="max-w-4xl mx-auto px-4 py-8">
       <div className="flex justify-between items-center mb-8">
-        <h1 className="text-2xl font-bold text-gray-900">Log Sheets</h1>
-        <Link to="/" className="btn btn-primary">
-          New Trip
+        <h1 className="text-2xl font-bold text-gray-900">Trip Logs</h1>
+        <Link to={`/trip/${tripId}`} className="btn btn-primary">
+          Back to Trip
         </Link>
       </div>
 
       {logSheets.length === 0 ? (
         <div className="card text-center py-12">
-          <p className="text-gray-500">No log sheets found. Create a new trip to get started.</p>
+          <p className="text-gray-500">No logs found for this trip.</p>
         </div>
       ) : (
         <div className="grid gap-6">
           {logSheets.map((log) => (
             <Link
               key={log.id}
-              to={`/log-sheet/${log.id}`}
+              to={`/trip/${tripId}/log-sheet/${log.id}`}
               className="card hover:shadow-md transition-shadow"
             >
               <div className="flex justify-between items-start">
                 <div>
-                  <h2 className="text-lg font-semibold text-gray-900">Log Sheet #{log.id}</h2>
+                  <h2 className="text-lg font-semibold text-gray-900">Log #{log.id}</h2>
                   <div className="mt-2 space-y-1">
                     <p className="text-gray-600">
                       <span className="font-medium">Start:</span>{' '}

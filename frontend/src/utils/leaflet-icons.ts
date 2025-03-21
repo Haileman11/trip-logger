@@ -18,4 +18,11 @@ export const createCustomIcon = (color: string) => L.icon({
   iconAnchor: [12, 41],
   popupAnchor: [1, -34],
   shadowSize: [41, 41]
-}); 
+});
+
+export const leafletIcons = {
+  greenIcon: createCustomIcon('green'),
+  redIcon: createCustomIcon('red'),
+  blueIcon: createCustomIcon('blue'),
+  defaultIcon: DefaultIcon
+}; 

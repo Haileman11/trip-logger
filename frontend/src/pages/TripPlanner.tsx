@@ -6,7 +6,7 @@ import RouteMap from '../components/RouteMap';
 
 const TripPlanner = () => {
   const dispatch = useDispatch<AppDispatch>();
-  const { currentTrip, loading, error } = useSelector((state: RootState) => state.trip);
+  const { currentTrip, loading, error } = useSelector((state: RootState) => state.trips);
   const [formData, setFormData] = useState({
     current_location: { latitude: 9.0248826, longitude: 38.7807792 },
     pickup_location: { latitude: 9.0148826, longitude: 38.7807792 },
@@ -42,6 +42,20 @@ const TripPlanner = () => {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
+      // Validate coordinates
+      const validateLocation = (loc: { latitude: number; longitude: number }) => {
+        return !isNaN(loc.latitude) && !isNaN(loc.longitude) &&
+               loc.latitude >= -90 && loc.latitude <= 90 &&
+               loc.longitude >= -180 && loc.longitude <= 180;
+      };
+
+      if (!validateLocation(formData.current_location) ||
+          !validateLocation(formData.pickup_location) ||
+          !validateLocation(formData.dropoff_location)) {
+        setLocationError('Please enter valid coordinates for all locations');
+        return;
+      }
+
       console.log('Creating trip with data:', formData);
       const result = await dispatch(createTrip(formData)).unwrap();
       console.log('Trip created:', result);
@@ -54,29 +68,30 @@ const TripPlanner = () => {
           })).unwrap();
           
           console.log('Route planned successfully:', response);
-          console.log('Route data:', response.route);
-          console.log('Stops:', response.stops);
           
-          if (!response.route || !response.stops) {
-            console.error('Missing route or stops data in response');
-            return;
+          if (!response.stops || response.stops.length === 0) {
+            throw new Error('No stops were generated for the route');
           }
           
-          setRouteData(response.route);
+          setRouteData(response.route || {});
           setStops(response.stops);
         } catch (planError) {
           console.error('Error planning route:', planError);
           if (planError instanceof Error) {
-            console.error('Error details:', planError.message);
+            setLocationError(planError.message);
+          } else {
+            setLocationError('Failed to plan route. Please try again.');
           }
         }
       } else {
-        console.error('No trip ID in response:', result);
+        setLocationError('Failed to create trip. Please try again.');
       }
     } catch (err) {
       console.error('Failed to create or plan trip:', err);
       if (err instanceof Error) {
-        console.error('Error details:', err.message);
+        setLocationError(err.message);
+      } else {
+        setLocationError('An unexpected error occurred. Please try again.');
       }
     }
   };

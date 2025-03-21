@@ -3,7 +3,7 @@ import { useParams, Link } from 'react-router-dom';
 import styled from 'styled-components';
 import { MapContainer, TileLayer, Marker, Popup, Polyline } from 'react-leaflet';
 import { LatLngBounds, latLng, LatLngTuple } from 'leaflet';
-import { fetchTrip } from '../store/tripSlice';
+import { fetchTrip } from '../store/slices/tripSlice';
 import { useAppDispatch } from '../hooks/useAppDispatch';
 import { useAppSelector } from '../hooks/useAppSelector';
 import '../utils/leaflet-icons';
