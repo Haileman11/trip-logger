@@ -11,7 +11,15 @@ const LogViewer = () => {
 
   useEffect(() => {
     if (tripId) {
-      dispatch(fetchLogSheets(tripId));
+      console.log('Fetching log sheets for trip:', tripId);
+      dispatch(fetchLogSheets(tripId))
+        .unwrap()
+        .then((data) => {
+          console.log('Fetched log sheets:', data);
+        })
+        .catch((error) => {
+          console.error('Error fetching log sheets:', error);
+        });
     }
   }, [dispatch, tripId]);
 
@@ -37,14 +45,31 @@ const LogViewer = () => {
     <div className="max-w-4xl mx-auto px-4 py-8">
       <div className="flex justify-between items-center mb-8">
         <h1 className="text-2xl font-bold text-gray-900">Trip Logs</h1>
-        <Link to={`/trip/${tripId}`} className="btn btn-primary">
-          Back to Trip
-        </Link>
+        <div className="space-x-4">
+          <Link 
+            to={`/trip/${tripId}/log-sheet/new`}
+            className="btn btn-primary"
+          >
+            Add New Log
+          </Link>
+          <Link 
+            to={`/trip/${tripId}`} 
+            className="inline-flex items-center px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
+          >
+            Back to Trip
+          </Link>
+        </div>
       </div>
 
-      {logSheets.length === 0 ? (
-        <div className="card text-center py-12">
-          <p className="text-gray-500">No logs found for this trip.</p>
+      {!logSheets || logSheets.length === 0 ? (
+        <div className="bg-white shadow rounded-lg p-8 text-center">
+          <p className="text-gray-500 mb-4">No logs found for this trip.</p>
+          <Link
+            to={`/trip/${tripId}/log-sheet/new`}
+            className="inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
+          >
+            Create Your First Log
+          </Link>
         </div>
       ) : (
         <div className="grid gap-6">
@@ -52,7 +77,7 @@ const LogViewer = () => {
             <Link
               key={log.id}
               to={`/trip/${tripId}/log-sheet/${log.id}`}
-              className="card hover:shadow-md transition-shadow"
+              className="bg-white shadow rounded-lg p-6 hover:shadow-md transition-shadow"
             >
               <div className="flex justify-between items-start">
                 <div>
@@ -71,10 +96,10 @@ const LogViewer = () => {
                   </div>
                 </div>
                 <div className="text-right">
-                  <span className={`status-badge ${
-                    log.status === 'active' ? 'status-badge-active' :
-                    log.status === 'completed' ? 'status-badge-completed' :
-                    'status-badge-pending'
+                  <span className={`inline-flex px-2 py-1 text-sm rounded-full ${
+                    log.status === 'active' ? 'bg-green-100 text-green-800' :
+                    log.status === 'completed' ? 'bg-blue-100 text-blue-800' :
+                    'bg-gray-100 text-gray-800'
                   }`}>
                     {log.status}
                   </span>

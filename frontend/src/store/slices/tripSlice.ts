@@ -27,6 +27,11 @@ interface TripState {
   currentTrip: Trip | null;
   loading: boolean;
   error: string | null;
+  pagination: {
+    count: number;
+    next: string | null;
+    previous: string | null;
+  };
 }
 
 const initialState: TripState = {
@@ -34,16 +39,55 @@ const initialState: TripState = {
   currentTrip: null,
   loading: false,
   error: null,
+  pagination: {
+    count: 0,
+    next: null,
+    previous: null,
+  },
 };
 
 export const fetchTrips = createAsyncThunk(
   'trips/fetchTrips',
-  async () => {
-    const response = await fetch('/api/trips/');
-    if (!response.ok) {
-      throw new Error('Failed to fetch trips');
+  async ({ page = 1, sortBy = 'id', sortOrder = 'desc' }: { page?: number; sortBy?: string; sortOrder?: 'asc' | 'desc' } = {}) => {
+    try {
+      const params = new URLSearchParams({
+        page: page.toString(),
+        ordering: sortOrder === 'desc' ? `-${sortBy}` : sortBy,
+      });
+      
+      console.log('Fetching trips with params:', params.toString());
+      const response = await fetch(`/api/trips/?${params.toString()}`);
+      console.log('API Response status:', response.status);
+      
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error('API Error response:', errorText);
+        throw new Error('Failed to fetch trips');
+      }
+      
+      const data = await response.json();
+      console.log('API Response data:', data);
+      
+      // Handle both paginated and non-paginated responses
+      const trips = Array.isArray(data) ? data : (data.results || []);
+      const pagination = Array.isArray(data) ? {
+        count: data.length,
+        next: null,
+        previous: null,
+      } : {
+        count: data.count || data.length || 0,
+        next: data.next || null,
+        previous: data.previous || null,
+      };
+      
+      return {
+        trips,
+        pagination
+      };
+    } catch (error) {
+      console.error('Error fetching trips:', error);
+      throw error;
     }
-    return response.json();
   }
 );
 
@@ -108,11 +152,19 @@ const tripSlice = createSlice({
       })
       .addCase(fetchTrips.fulfilled, (state, action) => {
         state.loading = false;
-        state.trips = action.payload;
+        state.trips = action.payload.trips;
+        state.pagination = action.payload.pagination;
+        state.error = null;
       })
       .addCase(fetchTrips.rejected, (state, action) => {
         state.loading = false;
         state.error = action.error.message || 'Failed to fetch trips';
+        state.trips = [];
+        state.pagination = {
+          count: 0,
+          next: null,
+          previous: null,
+        };
       })
       .addCase(fetchTrip.pending, (state) => {
         state.loading = true;

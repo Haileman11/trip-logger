@@ -108,7 +108,7 @@ const TripList: React.FC = () => {
   const { trips, loading, error } = useAppSelector(state => state.trips);
 
   useEffect(() => {
-    dispatch(fetchTrips());
+    dispatch(fetchTrips({ page: 1, sortBy: 'created_at', sortOrder: 'desc' }));
   }, [dispatch]);
 
   if (loading) {
@@ -168,7 +168,7 @@ const TripList: React.FC = () => {
             <Button to={`/trip/${trip.id}`} className="primary">
               View Details
             </Button>
-            <Button to={`/trip/${trip.id}/logs`} className="secondary">
+            <Button to={`/trip/${trip.id}/log-sheets`} className="secondary">
               Log Sheets
             </Button>
           </ActionButtons>

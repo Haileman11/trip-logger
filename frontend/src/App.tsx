@@ -7,6 +7,7 @@ import TripList from './components/TripList';
 import TripDetails from './components/TripDetails';
 import TripPlanner from './pages/TripPlanner';
 import LogSheet from './pages/LogSheet';
+import LogViewer from './pages/LogViewer';
 
 const App: React.FC = () => {
   return (
@@ -19,7 +20,9 @@ const App: React.FC = () => {
               <Route path="/" element={<TripList />} />
               <Route path="/new-trip" element={<TripPlanner />} />
               <Route path="/trip/:tripId" element={<TripDetails />} />
-              <Route path="/trip/:tripId/logs" element={<LogSheet />} />
+              <Route path="/trip/:tripId/log-sheets" element={<LogViewer />} />
+              <Route path="/trip/:tripId/log-sheet/:id" element={<LogSheet />} />
+              <Route path="/trip/:tripId/log-sheet/new" element={<LogSheet />} />
             </Routes>
           </main>
         </div>
