@@ -7,7 +7,7 @@ interface LogSheet {
   id: number;
   trip_id: number;
   start_time: string;
-  end_time: string;
+  end_time: string | null;
   start_location: {
     latitude: number;
     longitude: number;
@@ -15,9 +15,9 @@ interface LogSheet {
   end_location: {
     latitude: number;
     longitude: number;
-  };
+  } | null;
   start_cycle_hours: number;
-  end_cycle_hours: number;
+  end_cycle_hours: number | null;
   status: string;
 }
 

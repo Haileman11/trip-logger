@@ -1,8 +1,11 @@
 import { useEffect, useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { useDispatch, useSelector } from 'react-redux';
-import { updateLogSheet } from '../store/slices/logSlice';
+import { updateLogSheet, fetchLogSheet } from '../store/slices/logSlice';
+import DailyLogGrid from '../components/DailyLogGrid';
 import type { RootState, AppDispatch } from '../store';
+
+type DutyStatus = 'offDuty' | 'sleeper' | 'driving' | 'onDuty';
 
 const LogSheet = () => {
   const { id } = useParams<{ id: string }>();
@@ -16,11 +19,22 @@ const LogSheet = () => {
   });
 
   useEffect(() => {
+    if (id && currentTrip?.id) {
+      dispatch(fetchLogSheet({ tripId: currentTrip.id, logId: parseInt(id) }));
+    }
+  }, [dispatch, id, currentTrip?.id]);
+
+  useEffect(() => {
     if (currentLogSheet) {
+      // Convert the ISO string to local datetime-local format
+      const endTime = currentLogSheet.end_time 
+        ? new Date(currentLogSheet.end_time).toISOString().slice(0, 16)
+        : '';
+
       setFormData({
-        end_time: currentLogSheet.end_time,
-        end_location: currentLogSheet.end_location,
-        end_cycle_hours: currentLogSheet.end_cycle_hours,
+        end_time: endTime,
+        end_location: currentLogSheet.end_location || { latitude: 0, longitude: 0 },
+        end_cycle_hours: currentLogSheet.end_cycle_hours || 0,
       });
     }
   }, [currentLogSheet]);
@@ -30,10 +44,16 @@ const LogSheet = () => {
     if (!id || !currentTrip?.id) return;
 
     try {
+      // Convert the datetime-local value back to ISO format
+      const updatedData = {
+        ...formData,
+        end_time: formData.end_time ? new Date(formData.end_time).toISOString() : null,
+      };
+
       await dispatch(updateLogSheet({
         tripId: currentTrip.id,
         logId: parseInt(id),
-        logData: formData,
+        logData: updatedData,
       })).unwrap();
     } catch (err) {
       console.error('Failed to update log sheet:', err);

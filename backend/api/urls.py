@@ -4,6 +4,7 @@ from .views import TripViewSet, StopViewSet, LogSheetViewSet
 
 router = DefaultRouter()
 router.register(r'trips', TripViewSet)
+router.register(r'log-sheets', LogSheetViewSet)
 
 urlpatterns = [
     path('', include(router.urls)),

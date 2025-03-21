@@ -50,7 +50,7 @@ class TripViewSet(viewsets.ModelViewSet):
                 )
             
             route_data = response.json()
-            print(f"OSRM response: {json.dumps(route_data, indent=2)}")
+            # print(f"OSRM response: {json.dumps(route_data, indent=2)}")
             
             if not route_data.get('routes'):
                 print("No routes found in OSRM response")
@@ -105,7 +105,7 @@ class TripViewSet(viewsets.ModelViewSet):
                 'route': route_data,
                 'stops': StopSerializer([pickup_stop, dropoff_stop], many=True).data
             }
-            print(f"Sending response: {json.dumps(response_data, indent=2)}")
+            # print(f"Sending response: {json.dumps(response_data, indent=2)}")
             return Response(response_data)
 
         except Exception as e:
@@ -123,7 +123,9 @@ class LogSheetViewSet(viewsets.ModelViewSet):
 
     def get_queryset(self):
         trip_id = self.kwargs.get('trip_pk')
-        return LogSheet.objects.filter(trip_id=trip_id)
+        if trip_id:
+            return LogSheet.objects.filter(trip_id=trip_id)
+        return LogSheet.objects.all().order_by('-created_at')
 
     def perform_create(self, serializer):
         trip = get_object_or_404(Trip, pk=self.kwargs.get('trip_pk'))

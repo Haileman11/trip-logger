@@ -1,19 +1,16 @@
 import { useEffect } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 import { Link } from 'react-router-dom';
-import { fetchLogSheets } from '../store/slices/logSlice';
+import { fetchAllLogSheets } from '../store/slices/logSlice';
 import type { RootState, AppDispatch } from '../store';
 
 const LogViewer = () => {
   const dispatch = useDispatch<AppDispatch>();
   const { logSheets, loading, error } = useSelector((state: RootState) => state.log);
-  const { currentTrip } = useSelector((state: RootState) => state.trip);
 
   useEffect(() => {
-    if (currentTrip?.id) {
-      dispatch(fetchLogSheets(currentTrip.id));
-    }
-  }, [dispatch, currentTrip?.id]);
+    dispatch(fetchAllLogSheets());
+  }, [dispatch]);
 
   if (loading) {
     return (
