@@ -1,5 +1,17 @@
 import React from 'react';
 import styled from 'styled-components';
+import {
+  LineChart,
+  Line,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  ResponsiveContainer,
+  ComposedChart,
+  Scatter,
+  Legend
+} from 'recharts';
 
 type DutyStatus = 'offDuty' | 'sleeper' | 'driving' | 'onDuty';
 
@@ -23,6 +35,10 @@ interface DailyLogGridProps {
   driverName: string;
   remarks: { time: string; location: string }[];
   dutyStatusChanges: DutyStatusChange[];
+}
+
+interface StatusLabels {
+  [key: number]: string;
 }
 
 const GridContainer = styled.div`
@@ -123,101 +139,22 @@ const CarrierInfo = styled.div`
   }
 `;
 
-const GridSection = styled.div`
+const ChartContainer = styled.div`
   position: relative;
   height: 400px;
   border: 1px solid #000;
   margin: 20px 0;
-  padding: 20px 140px;
+  padding: 20px;
   background-color: #fff;
 `;
 
-const TimeGrid = styled.div`
-  display: grid;
-  grid-template-columns: repeat(24, 1fr);
-  height: 100%;
-  border-top: 1px solid #000;
+const RemarksChartContainer = styled.div`
   position: relative;
-  background: repeating-linear-gradient(
-    90deg,
-    #f9f9f9,
-    #f9f9f9 calc(100% / 24),
-    #fff calc(100% / 24),
-    #fff calc(200% / 24)
-  );
-
-  .hour-column {
-    border-right: 1px solid #ddd;
-    position: relative;
-    
-    &:nth-child(6n) {
-      border-right: 1px solid #999;
-    }
-
-    .hour-label {
-      position: absolute;
-      top: -20px;
-      left: 50%;
-      transform: translateX(-50%);
-      font-size: 0.7em;
-      color: #666;
-    }
-  }
-`;
-
-const StatusLabels = styled.div`
-  position: absolute;
-  left: -120px;
-  top: 0;
-  height: 100%;
-  display: grid;
-  grid-template-rows: repeat(4, 1fr);
-  gap: 1px;
-  font-size: 0.8em;
-  
-  div {
-    display: flex;
-    align-items: center;
-    padding-right: 10px;
-    height: 100%;
-    font-weight: 500;
-  }
-`;
-
-const TotalHours = styled.div`
-  position: absolute;
-  right: -50px;
-  top: 0;
-  height: 100%;
-  display: grid;
-  grid-template-rows: repeat(4, 1fr);
-  gap: 1px;
-  font-size: 0.8em;
-  
-  div {
-    display: flex;
-    align-items: center;
-    padding-left: 10px;
-    height: 100%;
-    font-weight: bold;
-  }
-`;
-
-const StatusLine = styled.div<{ top: number; left: number; width: number }>`
-  position: absolute;
-  height: 2px;
-  background-color: #0066cc;
-  top: ${props => props.top}%;
-  left: ${props => props.left}%;
-  width: ${props => props.width}%;
-`;
-
-const VerticalLine = styled.div<{ left: number }>`
-  position: absolute;
-  width: 1px;
-  background-color: #0066cc;
-  height: 100%;
-  left: ${props => props.left}%;
+  height: 100px;
+  border: 1px solid #000;
+  margin: 20px 0;
+  padding: 20px;
+  background-color: #fff;
 `;
 
 const DateSection = styled.div`
@@ -290,54 +227,87 @@ const DailyLogGrid: React.FC<DailyLogGridProps> = ({
   remarks,
   dutyStatusChanges,
 }) => {
-  const getTimePercentage = (timeStr: string) => {
-    const [hours, minutes] = timeStr.split(':').map(Number);
-    return ((hours + minutes / 60) / 24) * 100;
+  const statusMap = {
+    offDuty: 4,    // Top
+    sleeper: 3,    // Second
+    driving: 2,    // Third
+    onDuty: 1,     // Bottom
   };
 
-  const getStatusPosition = (status: DutyStatus) => {
-    const positions = {
-      offDuty: 12.5,
-      sleeper: 37.5,
-      driving: 62.5,
-      onDuty: 87.5,
+  const statusLabels: StatusLabels = {
+    4: 'Off Duty',
+    3: 'Sleeper Berth',
+    2: 'Driving',
+    1: 'On Duty (Not Driving)',
+    0: '',
+  };
+
+  const getTimeLabel = (hour: number) => {
+    if (hour === 0) return 'Midnight';
+    if (hour === 12) return 'Noon';
+    // if (hour > 12) return `${hour - 12} PM`;
+    return `${hour}`;
+  };
+
+  const generateTimePoints = () => {
+    const timePoints = [];
+    for (let hour = 0; hour < 24; hour++) {
+      timePoints.push({
+        time: getTimeLabel(hour),
+        hour: hour,
+        status: 3
+      });
+    }
+    return timePoints;
+  };
+
+  const calculateStatusHours = (data: any[]) => {
+    const hours = {
+      onDuty: 0,
+      driving: 0,
+      sleeper: 0,
+      offDuty: 0,
     };
-    return positions[status];
+
+    data.forEach(point => {
+      switch (point.status) {
+        case 0: hours.onDuty++; break;
+        case 1: hours.driving++; break;
+        case 2: hours.sleeper++; break;
+        case 3: hours.offDuty++; break;
+      }
+    });
+
+    return hours;
   };
 
-  const drawStatusLines = () => {
-    const lines = [];
-    for (let i = 0; i < dutyStatusChanges.length - 1; i++) {
-      const current = dutyStatusChanges[i];
-      const next = dutyStatusChanges[i + 1];
-      
-      const startTime = getTimePercentage(current.time);
-      const endTime = getTimePercentage(next.time);
-      const top = getStatusPosition(current.status);
-      
-      lines.push(
-        <React.Fragment key={`line-${i}`}>
-          <StatusLine
-            top={top}
-            left={startTime}
-            width={endTime - startTime}
-          />
-          <VerticalLine left={startTime} />
-        </React.Fragment>
-      );
-    }
-    // Add final vertical line
-    if (dutyStatusChanges.length > 0) {
-      const lastChange = dutyStatusChanges[dutyStatusChanges.length - 1];
-      lines.push(
-        <VerticalLine
-          key="final-line"
-          left={getTimePercentage(lastChange.time)}
-        />
-      );
-    }
-    return lines;
+  const processDataForChart = () => {
+    const timePoints = generateTimePoints();
+    
+    const sortedChanges = [...dutyStatusChanges].sort((a, b) => {
+      const [hoursA] = a.time.split(':').map(Number);
+      const [hoursB] = b.time.split(':').map(Number);
+      return hoursA - hoursB;
+    });
+
+    sortedChanges.forEach(change => {
+      const [hours] = change.time.split(':').map(Number);
+      timePoints[hours].status = statusMap[change.status];
+    });
+
+    return timePoints;
   };
+
+  const processRemarksData = () => {
+    return remarks.map(remark => ({
+      time: getTimeLabel(parseInt(remark.time.split(':')[0])),
+      remark: 1,
+      location: remark.location
+    }));
+  };
+
+  const data = processDataForChart();
+  const statusHours = calculateStatusHours(data);
 
   return (
     <GridContainer>
@@ -350,20 +320,20 @@ const DailyLogGrid: React.FC<DailyLogGridProps> = ({
         <HeaderSection>
           <div className="title">DATE</div>
           <DateSection>
-            <div>
+          <div>
               <div className="date-label">Month</div>
               <div className="date-value">{date.month}</div>
-            </div>
+          </div>
             <div className="date-separator">/</div>
-            <div>
+          <div>
               <div className="date-label">Day</div>
               <div className="date-value">{date.day}</div>
-            </div>
+          </div>
             <div className="date-separator">/</div>
             <div>
               <div className="date-label">Year</div>
               <div className="date-value">{date.year}</div>
-            </div>
+        </div>
           </DateSection>
           <div className="title">TOTAL MILES DRIVING TODAY</div>
           <div className="miles">{totalMilesDriving}</div>
@@ -380,35 +350,77 @@ const DailyLogGrid: React.FC<DailyLogGridProps> = ({
         <div className="driver-name">{driverName}</div>
       </CarrierInfo>
 
-      <GridSection>
-        <StatusLabels>
-          <div>Off Duty</div>
-          <div>Sleeper Berth</div>
-          <div>Driving</div>
-          <div>On Duty (Not Driving)</div>
-        </StatusLabels>
-
-        <TimeGrid>
-          {Array.from({ length: 24 }, (_, i) => (
-            <div key={i} className="hour-column">
-              <div className="hour-label">
-                {i === 0 ? 'Midnight' : i === 12 ? 'Noon' : i}
-              </div>
-            </div>
-          ))}
-          {drawStatusLines()}
-        </TimeGrid>
-
-        <TotalHours>
-          <div>10</div>
-          <div>1.75</div>
-          <div>7.75</div>
-          <div>4.5</div>
-        </TotalHours>
-      </GridSection>
+      <ChartContainer>
+        <ResponsiveContainer width="100%" height="100%">
+          <LineChart data={data}>
+            <CartesianGrid strokeDasharray="3 3" />
+            <XAxis 
+              dataKey="time"
+              interval={0}
+              height={60}
+              tick={(props) => (
+                <g transform={`translate(${props.x},${props.y})`}>
+                  <text
+                    x={0}
+                    y={0}
+                    dy={16}
+                    textAnchor="end"
+                    fill="#666"
+                    // transform="rotate(-35)"
+                  >
+                    {props.payload.value}
+                  </text>
+                </g>
+              )}
+            />
+            <YAxis 
+              tickFormatter={(tick: number) => statusLabels[tick] || ''}
+              domain={[0, 4]}
+            />
+            <Tooltip 
+              formatter={(value: number) => statusLabels[value] || ''}
+              labelFormatter={(label) => `Time: ${label}`}
+            />
+            <Legend 
+              verticalAlign="top" 
+              height={36}
+              formatter={(value: string) => {
+                const status = Object.entries(statusMap).find(([_, v]) => statusLabels[v] === value)?.[0];
+                return `${value} (${statusHours[status as keyof typeof statusHours]} hrs)`;
+              }}
+            />
+            <Line 
+              type="stepAfter" 
+              dataKey="status" 
+              stroke="#0066cc" 
+              strokeWidth={2}
+              dot={{ fill: '#0066cc', r: 4 }}
+              activeDot={{ r: 6 }}
+            />
+          </LineChart>
+        </ResponsiveContainer>
+      </ChartContainer>
 
       <RemarksSection>
         <div className="title">REMARKS</div>
+        <RemarksChartContainer>
+          <ResponsiveContainer width="100%" height="100%">
+            <ComposedChart data={processRemarksData()}>
+              <XAxis
+                dataKey="time"
+                type="category"
+                hide
+              />
+              <YAxis hide />
+              <Scatter
+                dataKey="remark"
+                fill="#000"
+                shape="triangle"
+                legendType="none"
+              />
+            </ComposedChart>
+          </ResponsiveContainer>
+        </RemarksChartContainer>
         <div className="remarks-grid">
           {remarks.map((remark, index) => (
             <div key={index} className="remark-entry">
@@ -416,7 +428,7 @@ const DailyLogGrid: React.FC<DailyLogGridProps> = ({
               <span className="location">{remark.location}</span>
             </div>
           ))}
-        </div>
+      </div>
       </RemarksSection>
     </GridContainer>
   );
