@@ -146,6 +146,40 @@ const ChartContainer = styled.div`
   margin: 20px 0;
   padding: 20px;
   background-color: #fff;
+  display: flex;
+  /* gap: 20px; */
+`;
+
+const ChartWrapper = styled.div`
+  flex: 1;
+  height: 100%;
+`;
+
+const StatusSummary = styled.div`
+  width: 75px;
+  height: 60%;
+  margin: 20px 0;
+  /* padding: 0 10px; */
+  /* border-left: 1px solid #000; */
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+
+  .status-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 5px 0;
+    font-size: 0.9em;
+
+    .status-name {
+      font-weight: bold;
+    }
+
+    .status-hours {
+      color: #666;
+    }
+  }
 `;
 
 const RemarksChartContainer = styled.div`
@@ -245,13 +279,14 @@ const DailyLogGrid: React.FC<DailyLogGridProps> = ({
   const getTimeLabel = (hour: number) => {
     if (hour === 0) return 'Midnight';
     if (hour === 12) return 'Noon';
+    if (hour === 24) return 'Midnight';
     // if (hour > 12) return `${hour - 12} PM`;
     return `${hour}`;
   };
 
   const generateTimePoints = () => {
     const timePoints = [];
-    for (let hour = 0; hour < 24; hour++) {
+    for (let hour = 0; hour < 25; hour++) {
       timePoints.push({
         time: getTimeLabel(hour),
         hour: hour,
@@ -263,18 +298,18 @@ const DailyLogGrid: React.FC<DailyLogGridProps> = ({
 
   const calculateStatusHours = (data: any[]) => {
     const hours = {
-      onDuty: 0,
-      driving: 0,
-      sleeper: 0,
       offDuty: 0,
+      sleeper: 0,
+      driving: 0,
+      onDuty: 0,
     };
 
     data.forEach(point => {
       switch (point.status) {
-        case 0: hours.onDuty++; break;
-        case 1: hours.driving++; break;
-        case 2: hours.sleeper++; break;
-        case 3: hours.offDuty++; break;
+        case 4: hours.offDuty++; break;
+        case 3: hours.sleeper++; break;
+        case 2: hours.driving++; break;
+        case 1: hours.onDuty++; break;
       }
     });
 
@@ -351,54 +386,68 @@ const DailyLogGrid: React.FC<DailyLogGridProps> = ({
       </CarrierInfo>
 
       <ChartContainer>
-        <ResponsiveContainer width="100%" height="100%">
-          <LineChart data={data}>
-            <CartesianGrid strokeDasharray="3 3" />
-            <XAxis 
-              dataKey="time"
-              interval={0}
-              height={60}
-              tick={(props) => (
-                <g transform={`translate(${props.x},${props.y})`}>
-                  <text
-                    x={0}
-                    y={0}
-                    dy={16}
-                    textAnchor="end"
-                    fill="#666"
-                    // transform="rotate(-35)"
-                  >
-                    {props.payload.value}
-                  </text>
-                </g>
-              )}
-            />
-            <YAxis 
-              tickFormatter={(tick: number) => statusLabels[tick] || ''}
-              domain={[0, 4]}
-            />
-            <Tooltip 
-              formatter={(value: number) => statusLabels[value] || ''}
-              labelFormatter={(label) => `Time: ${label}`}
-            />
-            <Legend 
-              verticalAlign="top" 
-              height={36}
-              formatter={(value: string) => {
-                const status = Object.entries(statusMap).find(([_, v]) => statusLabels[v] === value)?.[0];
-                return `${value} (${statusHours[status as keyof typeof statusHours]} hrs)`;
-              }}
-            />
-            <Line 
-              type="stepAfter" 
-              dataKey="status" 
-              stroke="#0066cc" 
-              strokeWidth={2}
-              dot={{ fill: '#0066cc', r: 4 }}
-              activeDot={{ r: 6 }}
-            />
-          </LineChart>
-        </ResponsiveContainer>
+        <ChartWrapper>
+          <ResponsiveContainer width="100%" height="100%" >
+            <LineChart data={data} margin={{ top: 20, right: 20, bottom: 20, left: 20 }}>
+              <CartesianGrid strokeDasharray="3 3" />
+              <XAxis 
+                dataKey="time" 
+                interval={0}
+                height={60}
+                tickLine={false}
+                tick={(props) => (
+                  <g transform={`translate(${props.x},${props.y})`}>
+                    <text
+                      x={0}
+                      y={0}
+                      dy={16}
+                      textAnchor="end"
+                      fill="#666"
+                       transform="rotate(-45)"
+                    >
+                      {props.payload.value}
+                    </text>
+                  </g>
+                )}
+              />
+              <YAxis 
+                tickLine={false}
+                tickFormatter={(tick: number) => statusLabels[tick] || ''}
+                domain={[0, 4]}
+              />
+              <Tooltip 
+                formatter={(value: number) => statusLabels[value] || ''}
+                labelFormatter={(label) => `Time: ${label}`}
+              />
+              <Line 
+                type="stepAfter" 
+                dataKey="status" 
+                stroke="#0066cc" 
+                strokeWidth={2}
+                dot={{ fill: '#0066cc', r: 4 }}
+                activeDot={{ r: 6 }}
+              />
+            </LineChart>
+          </ResponsiveContainer>
+        </ChartWrapper>
+        <StatusSummary>
+          <div className="status-item">
+            
+            <span className="status-hours">{statusHours.offDuty} hrs</span>
+          </div>
+          <div className="status-item">
+            
+            <span className="status-hours">{statusHours.sleeper} hrs</span>
+          </div>
+          <div className="status-item">
+                        <span className="status-hours">{statusHours.driving} hrs</span>
+          </div>
+          <div className="status-item">
+            
+            <span className="status-hours">{statusHours.onDuty} hrs</span>
+          </div>
+          
+        </StatusSummary>
       </ChartContainer>
 
       <RemarksSection>
