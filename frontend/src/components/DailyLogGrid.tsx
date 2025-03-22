@@ -11,226 +11,413 @@ interface DutyStatusChange {
 }
 
 interface DailyLogGridProps {
-  date: string;
+  date: {
+    month: string;
+    day: string;
+    year: string;
+  };
   totalMilesDriving: number;
-  totalMileageToday: number;
+  vehicleNumbers: string;
   carrierName: string;
   carrierAddress: string;
-  homeTerminal: string;
-  remarks: string;
+  driverName: string;
+  remarks: { time: string; location: string }[];
   dutyStatusChanges: DutyStatusChange[];
 }
 
 const GridContainer = styled.div`
   font-family: Arial, sans-serif;
   background-color: white;
-  border: 1px solid #ccc;
-  border-radius: 4px;
+  border: 1px solid #000;
   padding: 20px;
+  max-width: 1000px;
+  margin: 0 auto;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+`;
+
+const Header = styled.div`
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 20px;
+  margin-bottom: 20px;
+  border-bottom: 2px solid #000;
+  padding-bottom: 10px;
+`;
+
+const HeaderSection = styled.div`
+  text-align: center;
+
+  .title {
+    font-size: 0.8em;
+    color: #666;
+    text-transform: uppercase;
+    margin-bottom: 4px;
+  }
+
+  .content {
+    font-size: 1.2em;
+    font-weight: bold;
+    margin: 4px 0;
+  }
+
+  .subtitle {
+    font-size: 0.7em;
+    color: #666;
+  }
+
+  .date {
+    font-size: 1.4em;
+    font-weight: bold;
+    margin: 8px 0;
+  }
+
+  .miles {
+    font-size: 1.2em;
+    font-weight: bold;
+    margin: 4px 0;
+  }
+`;
+
+const CarrierInfo = styled.div`
+  margin: 20px 0;
+  text-align: center;
+  
+  .carrier-name {
+    font-size: 1.2em;
+    font-weight: bold;
+    margin-bottom: 4px;
+    font-style: italic;
+  }
+
+  .carrier-address {
+    font-size: 1em;
+    margin-bottom: 8px;
+    position: relative;
+    
+    &::before {
+      content: "MAIN OFFICE ADDRESS";
+      position: absolute;
+      top: -15px;
+      left: 50%;
+      transform: translateX(-50%);
+      font-size: 0.7em;
+      color: #666;
+    }
+  }
+
+  .driver-name {
+    font-size: 1.1em;
+    font-weight: bold;
+    font-style: italic;
+    position: relative;
+    
+    &::before {
+      content: "DRIVER\0027S SIGNATURE IN FULL";
+      position: absolute;
+      top: -15px;
+      left: 50%;
+      transform: translateX(-50%);
+      font-size: 0.7em;
+      color: #666;
+    }
+  }
+`;
+
+const GridSection = styled.div`
+  position: relative;
+  height: 400px;
+  border: 1px solid #000;
+  margin: 20px 0;
+  padding: 20px 140px;
+  background-color: #fff;
+`;
+
+const TimeGrid = styled.div`
+  display: grid;
+  grid-template-columns: repeat(24, 1fr);
+  height: 100%;
+  border-top: 1px solid #000;
+  position: relative;
+  background: repeating-linear-gradient(
+    90deg,
+    #f9f9f9,
+    #f9f9f9 calc(100% / 24),
+    #fff calc(100% / 24),
+    #fff calc(200% / 24)
+  );
+
+  .hour-column {
+    border-right: 1px solid #ddd;
+    position: relative;
+    
+    &:nth-child(6n) {
+      border-right: 1px solid #999;
+    }
+
+    .hour-label {
+      position: absolute;
+      top: -20px;
+      left: 50%;
+      transform: translateX(-50%);
+      font-size: 0.7em;
+      color: #666;
+    }
+  }
+`;
+
+const StatusLabels = styled.div`
+  position: absolute;
+  left: -120px;
+  top: 0;
+  height: 100%;
+  display: grid;
+  grid-template-rows: repeat(4, 1fr);
+  gap: 1px;
+  font-size: 0.8em;
+  
+  div {
+    display: flex;
+    align-items: center;
+    padding-right: 10px;
+    height: 100%;
+    font-weight: 500;
+  }
+`;
+
+const TotalHours = styled.div`
+  position: absolute;
+  right: -50px;
+  top: 0;
+  height: 100%;
+  display: grid;
+  grid-template-rows: repeat(4, 1fr);
+  gap: 1px;
+  font-size: 0.8em;
+  
+  div {
+    display: flex;
+    align-items: center;
+    padding-left: 10px;
+    height: 100%;
+    font-weight: bold;
+  }
+`;
+
+const StatusLine = styled.div<{ top: number; left: number; width: number }>`
+  position: absolute;
+  height: 2px;
+  background-color: #0066cc;
+  top: ${props => props.top}%;
+  left: ${props => props.left}%;
+  width: ${props => props.width}%;
+`;
+
+const VerticalLine = styled.div<{ left: number }>`
+  position: absolute;
+  width: 1px;
+  background-color: #0066cc;
+  height: 100%;
+  left: ${props => props.left}%;
+`;
+
+const DateSection = styled.div`
+  display: grid;
+  grid-template-columns: auto auto auto;
+  gap: 5px;
+  justify-content: center;
+  align-items: center;
+  margin-bottom: 5px;
+
+  .date-label {
+    font-size: 0.7em;
+    color: #666;
+    text-transform: uppercase;
+    text-align: center;
+  }
+
+  .date-value {
+    font-size: 1.4em;
+    font-weight: bold;
+    padding: 0 5px;
+  }
+
+  .date-separator {
+    font-size: 1.4em;
+    font-weight: bold;
+    color: #666;
+  }
+`;
+
+const RemarksSection = styled.div`
+  margin-top: 20px;
+  border: 1px solid #000;
+  padding: 15px;
+
+  .title {
+    font-weight: bold;
+    margin-bottom: 10px;
+    font-size: 0.9em;
+  }
+
+  .remarks-grid {
+    display: grid;
+    gap: 8px;
+    
+    .remark-entry {
+      display: grid;
+      grid-template-columns: 80px 1fr;
+      gap: 10px;
+      font-size: 0.8em;
+      
+      .time {
+        font-weight: 500;
+      }
+      
+      .location {
+        color: #333;
+      }
+    }
+  }
 `;
 
 const DailyLogGrid: React.FC<DailyLogGridProps> = ({
   date,
-  dutyStatusChanges,
   totalMilesDriving,
-  totalMileageToday,
+  vehicleNumbers,
   carrierName,
   carrierAddress,
-  homeTerminal,
+  driverName,
   remarks,
+  dutyStatusChanges,
 }) => {
-  const gridWidth = 1200;
-  const gridHeight = 240;
-  const statusHeight = gridHeight / 4;
-  const hourWidth = gridWidth / 24;
-  const margin = { top: 30, right: 100, bottom: 30, left: 100 };
-
-  const statusColors = {
-    offDuty: '#FFFFFF',
-    sleeper: '#A8D1FF',
-    driving: '#FFD700',
-    onDuty: '#FFE4B5',
-  };
-
-  const statusLabels = {
-    offDuty: 'Off Duty',
-    sleeper: 'Sleeper Berth',
-    driving: 'Driving',
-    onDuty: 'On Duty',
-  };
-
-  const getTimePosition = (timeStr: string) => {
+  const getTimePercentage = (timeStr: string) => {
     const [hours, minutes] = timeStr.split(':').map(Number);
-    return (hours + minutes / 60) * hourWidth;
+    return ((hours + minutes / 60) / 24) * 100;
   };
 
-  const calculateTotalHours = (status: DutyStatus) => {
-    let total = 0;
-    let lastChangeTime: number | null = null;
-    
-    dutyStatusChanges
-      .filter(change => change.status === status)
-      .forEach(change => {
-        const [hours, minutes] = change.time.split(':').map(Number);
-        const timeInHours = hours + minutes / 60;
-        
-        if (lastChangeTime !== null) {
-          total += timeInHours - lastChangeTime;
-        }
-        lastChangeTime = timeInHours;
-      });
-    
-    return total.toFixed(2);
+  const getStatusPosition = (status: DutyStatus) => {
+    const positions = {
+      offDuty: 12.5,
+      sleeper: 37.5,
+      driving: 62.5,
+      onDuty: 87.5,
+    };
+    return positions[status];
+  };
+
+  const drawStatusLines = () => {
+    const lines = [];
+    for (let i = 0; i < dutyStatusChanges.length - 1; i++) {
+      const current = dutyStatusChanges[i];
+      const next = dutyStatusChanges[i + 1];
+      
+      const startTime = getTimePercentage(current.time);
+      const endTime = getTimePercentage(next.time);
+      const top = getStatusPosition(current.status);
+      
+      lines.push(
+        <React.Fragment key={`line-${i}`}>
+          <StatusLine
+            top={top}
+            left={startTime}
+            width={endTime - startTime}
+          />
+          <VerticalLine left={startTime} />
+        </React.Fragment>
+      );
+    }
+    // Add final vertical line
+    if (dutyStatusChanges.length > 0) {
+      const lastChange = dutyStatusChanges[dutyStatusChanges.length - 1];
+      lines.push(
+        <VerticalLine
+          key="final-line"
+          left={getTimePercentage(lastChange.time)}
+        />
+      );
+    }
+    return lines;
   };
 
   return (
     <GridContainer>
-      <div style={{ marginBottom: '20px' }}>
-        <h2>Day 1</h2>
-        <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-          <div>
-            <p>Carrier: {carrierName}</p>
-            <p>Address: {carrierAddress}</p>
-            <p>Home Terminal: {homeTerminal}</p>
-          </div>
-          <div>
-            <p>Total Miles Driving: {totalMilesDriving}</p>
-            <p>Total Mileage Today: {totalMileageToday}</p>
-          </div>
+      <Header>
+        <HeaderSection>
+          <div className="title">U.S. DEPARTMENT OF TRANSPORTATION</div>
+          <div className="content">DRIVER'S DAILY LOG</div>
+          <div className="subtitle">(ONE CALENDAR DAY — 24 HOURS)</div>
+        </HeaderSection>
+        <HeaderSection>
+          <div className="title">DATE</div>
+          <DateSection>
+            <div>
+              <div className="date-label">Month</div>
+              <div className="date-value">{date.month}</div>
+            </div>
+            <div className="date-separator">/</div>
+            <div>
+              <div className="date-label">Day</div>
+              <div className="date-value">{date.day}</div>
+            </div>
+            <div className="date-separator">/</div>
+            <div>
+              <div className="date-label">Year</div>
+              <div className="date-value">{date.year}</div>
+            </div>
+          </DateSection>
+          <div className="title">TOTAL MILES DRIVING TODAY</div>
+          <div className="miles">{totalMilesDriving}</div>
+        </HeaderSection>
+        <HeaderSection>
+          <div className="title">VEHICLE NUMBERS—(SHOW EACH UNIT)</div>
+          <div className="content">{vehicleNumbers}</div>
+        </HeaderSection>
+      </Header>
+
+      <CarrierInfo>
+        <div className="carrier-name">{carrierName}</div>
+        <div className="carrier-address">{carrierAddress}</div>
+        <div className="driver-name">{driverName}</div>
+      </CarrierInfo>
+
+      <GridSection>
+        <StatusLabels>
+          <div>Off Duty</div>
+          <div>Sleeper Berth</div>
+          <div>Driving</div>
+          <div>On Duty (Not Driving)</div>
+        </StatusLabels>
+
+        <TimeGrid>
+          {Array.from({ length: 24 }, (_, i) => (
+            <div key={i} className="hour-column">
+              <div className="hour-label">
+                {i === 0 ? 'Midnight' : i === 12 ? 'Noon' : i}
+              </div>
+            </div>
+          ))}
+          {drawStatusLines()}
+        </TimeGrid>
+
+        <TotalHours>
+          <div>10</div>
+          <div>1.75</div>
+          <div>7.75</div>
+          <div>4.5</div>
+        </TotalHours>
+      </GridSection>
+
+      <RemarksSection>
+        <div className="title">REMARKS</div>
+        <div className="remarks-grid">
+          {remarks.map((remark, index) => (
+            <div key={index} className="remark-entry">
+              <span className="time">{remark.time}</span>
+              <span className="location">{remark.location}</span>
+            </div>
+          ))}
         </div>
-      </div>
-
-      <svg
-        width={gridWidth + margin.left + margin.right}
-        height={gridHeight + margin.top + margin.bottom}
-        style={{ backgroundColor: '#f5f5f5' }}
-      >
-        <g transform={`translate(${margin.left},${margin.top})`}>
-          {/* Draw vertical hour lines */}
-          {Array.from({ length: 25 }, (_, i) => (
-            <g key={`hour-${i}`}>
-              <line
-                x1={i * hourWidth}
-                y1={0}
-                x2={i * hourWidth}
-                y2={gridHeight}
-                stroke="#000"
-                strokeWidth={i % 6 === 0 ? 2 : 1}
-              />
-              <text
-                x={i * hourWidth}
-                y={-10}
-                textAnchor="middle"
-                fontSize="12"
-              >
-                {i === 12 ? 'Noon' : i === 0 ? 'Midnight' : i === 24 ? '24' : i.toString()}
-              </text>
-              {/* Draw quarter-hour marks */}
-              {Array.from({ length: 3 }, (_, j) => (
-                <line
-                  key={`quarter-${i}-${j}`}
-                  x1={i * hourWidth + ((j + 1) * hourWidth) / 4}
-                  y1={0}
-                  x2={i * hourWidth + ((j + 1) * hourWidth) / 4}
-                  y2={gridHeight}
-                  stroke="#000"
-                  strokeWidth={0.5}
-                  strokeDasharray="2,2"
-                />
-              ))}
-            </g>
-          ))}
-
-          {/* Draw horizontal status lines */}
-          {Object.entries(statusLabels).map(([status, label], i) => (
-            <g key={`status-${status}`}>
-              <rect
-                y={i * statusHeight}
-                width={gridWidth}
-                height={statusHeight}
-                fill={statusColors[status as DutyStatus]}
-                stroke="#000"
-              />
-              <text
-                x={-10}
-                y={i * statusHeight + statusHeight / 2}
-                textAnchor="end"
-                dominantBaseline="middle"
-                fontSize="12"
-              >
-                {label}
-              </text>
-              <text
-                x={gridWidth + 10}
-                y={i * statusHeight + statusHeight / 2}
-                dominantBaseline="middle"
-                fontSize="12"
-              >
-                {calculateTotalHours(status as DutyStatus)}
-              </text>
-            </g>
-          ))}
-
-          {/* Draw duty status changes */}
-          {dutyStatusChanges.map((change, i) => {
-            const x = getTimePosition(change.time);
-            const statusIndex = Object.keys(statusLabels).indexOf(change.status);
-            const y = statusIndex * statusHeight;
-
-            return (
-              <g key={`change-${i}`}>
-                {/* Draw vertical line for status change */}
-                <line
-                  x1={x}
-                  y1={0}
-                  x2={x}
-                  y2={gridHeight}
-                  stroke="red"
-                  strokeWidth={2}
-                />
-                {/* Add label if provided */}
-                {change.label && (
-                  <text
-                    x={x}
-                    y={y - 5}
-                    textAnchor="middle"
-                    fontSize="10"
-                    fill="red"
-                  >
-                    {change.label}
-                  </text>
-                )}
-                {/* Add break label if provided */}
-                {change.label?.startsWith('Break') && (
-                  <rect
-                    x={x}
-                    y={statusIndex * statusHeight}
-                    width={hourWidth * 2} // Assuming 2-hour break
-                    height={statusHeight}
-                    fill="white"
-                    stroke="none"
-                  >
-                    <text
-                      x={x + hourWidth}
-                      y={statusIndex * statusHeight + statusHeight / 2}
-                      textAnchor="middle"
-                      dominantBaseline="middle"
-                      fontSize="10"
-                    >
-                      {change.label}
-                    </text>
-                  </rect>
-                )}
-              </g>
-            );
-          })}
-        </g>
-      </svg>
-
-      <div style={{ marginTop: '20px' }}>
-        <h3>Remarks</h3>
-        <p>{remarks}</p>
-      </div>
+      </RemarksSection>
     </GridContainer>
   );
 };

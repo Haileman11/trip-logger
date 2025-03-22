@@ -11,6 +11,7 @@ import LogSheet from './pages/LogSheet';
 import LogViewer from './pages/LogViewer';
 import TripPlanner from './pages/TripPlanner';
 import TripList from './components/TripList';
+import DailyLogGrid from './components/DailyLogGrid';
 
 const App: React.FC = () => {
   return (
@@ -29,6 +30,39 @@ const App: React.FC = () => {
               <Route path="/trip/:tripId/log-sheets" element={<LogViewer />} />
               <Route path="/trip/:tripId/log-sheet/:id" element={<LogSheet />} />
               <Route path="/trip/:tripId/log-sheet/new" element={<LogSheet />} />
+              <Route path="/daily-log" element={<DailyLogGrid 
+                date={{
+                  month: "04",
+                  day: "09",
+                  year: "2021"
+                }}
+                totalMilesDriving={350}
+                vehicleNumbers="123, 20544"
+                carrierName="John Doe's Transportation"
+                carrierAddress="Washington, D.C."
+                driverName="John E. Doe"
+                remarks={[
+                  { time: "04:00", location: "Richmond, VA" },
+                  { time: "07:00", location: "Fredericksburg, VA" },
+                  { time: "10:00", location: "Baltimore, MD" },
+                  { time: "13:00", location: "Philadelphia, PA" },
+                  { time: "16:00", location: "Cherry Hill, NJ" },
+                  { time: "19:00", location: "Newark, NJ" }
+                ]}
+                dutyStatusChanges={[
+                  { time: "00:00", status: "offDuty", location: "Start" },
+                  { time: "04:00", status: "driving", location: "Richmond" },
+                  { time: "06:00", status: "onDuty", location: "Break" },
+                  { time: "07:00", status: "driving", location: "Resume" },
+                  { time: "10:00", status: "onDuty", location: "Baltimore" },
+                  { time: "11:00", status: "driving", location: "Resume" },
+                  { time: "13:00", status: "sleeper", location: "Philadelphia" },
+                  { time: "15:00", status: "driving", location: "Resume" },
+                  { time: "17:00", status: "onDuty", location: "Break" },
+                  { time: "18:00", status: "driving", location: "Resume" },
+                  { time: "20:00", status: "offDuty", location: "End" }
+                ]}
+              />} />
             </Routes>
           </main>
         </div>
