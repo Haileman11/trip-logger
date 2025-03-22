@@ -3,19 +3,94 @@ import { useDispatch, useSelector } from 'react-redux';
 import { createTrip, planRoute } from '../store/slices/tripSlice';
 import type { RootState, AppDispatch } from '../store';
 import RouteMap from '../components/RouteMap';
+import { MapContainer, TileLayer, Marker, useMapEvents, Popup } from 'react-leaflet';
+import 'leaflet/dist/leaflet.css';
+import L from 'leaflet';
+
+// Fix for default marker icons in React-Leaflet
+const defaultIcon = new L.Icon({
+  iconUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-icon.png',
+  iconRetinaUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-icon-2x.png',
+  shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-shadow.png',
+  iconSize: [25, 41],
+  iconAnchor: [12, 41],
+  popupAnchor: [1, -34],
+  shadowSize: [41, 41]
+});
+
+// Custom icons for pickup and dropoff
+const greenIcon = new L.Icon({
+  iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-green.png',
+  shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-shadow.png',
+  iconSize: [25, 41],
+  iconAnchor: [12, 41],
+  popupAnchor: [1, -34],
+  shadowSize: [41, 41]
+});
+
+const redIcon = new L.Icon({
+  iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-red.png',
+  shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-shadow.png',
+  iconSize: [25, 41],
+  iconAnchor: [12, 41],
+  popupAnchor: [1, -34],
+  shadowSize: [41, 41]
+});
+
+const LocationMarker = ({ 
+  position, 
+  icon,
+  onRemove 
+}: { 
+  position: L.LatLngTuple; 
+  icon: L.Icon;
+  onRemove?: () => void;
+}) => {
+  return (
+    <Marker position={position} icon={icon}>
+      {onRemove && (
+        <Popup>
+          <button
+            onClick={onRemove}
+            className="text-sm text-red-600 hover:text-red-800"
+          >
+            Remove Location
+          </button>
+        </Popup>
+      )}
+    </Marker>
+  );
+};
+
+const MapClickHandler = ({ 
+  onLocationSelect 
+}: { 
+  onLocationSelect: (location: { latitude: number; longitude: number }) => void;
+}) => {
+  useMapEvents({
+    click: (e) => {
+      onLocationSelect({
+        latitude: e.latlng.lat,
+        longitude: e.latlng.lng
+      });
+    }
+  });
+  return null;
+};
 
 const TripPlanner = () => {
   const dispatch = useDispatch<AppDispatch>();
   const { currentTrip, loading, error } = useSelector((state: RootState) => state.trips);
   const [formData, setFormData] = useState({
-    current_location: { latitude: 9.0248826, longitude: 38.7807792 },
-    pickup_location: { latitude: 9.0148826, longitude: 38.7807792 },
-    dropoff_location: { latitude: 8.9806034, longitude: 38.7577605 },
+    current_location: { latitude: 0, longitude: 0 },
+    pickup_location: { latitude: 0, longitude: 0 },
+    dropoff_location: { latitude: 0, longitude: 0 },
     current_cycle_hours: 0,
   });
   const [locationError, setLocationError] = useState<string | null>(null);
   const [routeData, setRouteData] = useState<any>(null);
   const [stops, setStops] = useState<any[]>([]);
+  const [isLocationSet, setIsLocationSet] = useState(false);
 
   useEffect(() => {
     if ('geolocation' in navigator) {
@@ -28,6 +103,7 @@ const TripPlanner = () => {
               longitude: position.coords.longitude,
             },
           }));
+          setIsLocationSet(true);
         },
         (error) => {
           setLocationError('Unable to get your location. Please enable location services.');
@@ -38,6 +114,34 @@ const TripPlanner = () => {
       setLocationError('Geolocation is not supported by your browser.');
     }
   }, []);
+
+  const handleLocationSelect = (location: { latitude: number; longitude: number }) => {
+    if (formData.pickup_location.latitude === 0) {
+      setFormData(prev => ({
+        ...prev,
+        pickup_location: location
+      }));
+    } else if (formData.dropoff_location.latitude === 0) {
+      setFormData(prev => ({
+        ...prev,
+        dropoff_location: location
+      }));
+    }
+  };
+
+  const handleRemovePickup = () => {
+    setFormData(prev => ({
+      ...prev,
+      pickup_location: { latitude: 0, longitude: 0 }
+    }));
+  };
+
+  const handleRemoveDropoff = () => {
+    setFormData(prev => ({
+      ...prev,
+      dropoff_location: { latitude: 0, longitude: 0 }
+    }));
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -53,6 +157,11 @@ const TripPlanner = () => {
           !validateLocation(formData.pickup_location) ||
           !validateLocation(formData.dropoff_location)) {
         setLocationError('Please enter valid coordinates for all locations');
+        return;
+      }
+
+      if (formData.pickup_location.latitude === 0 || formData.dropoff_location.latitude === 0) {
+        setLocationError('Please set both pickup and dropoff locations on the map');
         return;
       }
 
@@ -96,6 +205,11 @@ const TripPlanner = () => {
     }
   };
 
+  // Default center for the map
+  const defaultCenter: L.LatLngTuple = isLocationSet 
+    ? [formData.current_location.latitude, formData.current_location.longitude]
+    : [9.0248826, 38.7807792]; // Default to Addis Ababa coordinates
+
   return (
     <div className="max-w-4xl mx-auto px-4 py-8">
       <h1 className="text-2xl font-bold mb-6">Plan Your Trip</h1>
@@ -107,6 +221,53 @@ const TripPlanner = () => {
       )}
 
       <form onSubmit={handleSubmit} className="space-y-4 mb-8">
+        {/* Map Component */}
+        <div className="mb-6">
+          <div className="h-[400px] w-full rounded-lg overflow-hidden">
+            <MapContainer
+              center={defaultCenter}
+              zoom={13}
+              className="h-full w-full"
+              scrollWheelZoom={false}
+            >
+              <TileLayer
+                attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+                url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+              />
+              <MapClickHandler onLocationSelect={handleLocationSelect} />
+              
+              {/* Current Location Marker */}
+              {isLocationSet && (
+                <LocationMarker 
+                  position={[formData.current_location.latitude, formData.current_location.longitude]} 
+                  icon={defaultIcon}
+                />
+              )}
+              
+              {/* Pickup Location Marker */}
+              {formData.pickup_location.latitude !== 0 && (
+                <LocationMarker 
+                  position={[formData.pickup_location.latitude, formData.pickup_location.longitude]} 
+                  icon={greenIcon}
+                  onRemove={handleRemovePickup}
+                />
+              )}
+              
+              {/* Dropoff Location Marker */}
+              {formData.dropoff_location.latitude !== 0 && (
+                <LocationMarker 
+                  position={[formData.dropoff_location.latitude, formData.dropoff_location.longitude]} 
+                  icon={redIcon}
+                  onRemove={handleRemoveDropoff}
+                />
+              )}
+            </MapContainer>
+          </div>
+          <p className="mt-2 text-sm text-gray-500">
+            Click on the map to set pickup (green) and dropoff (red) locations. Click on a marker to remove it.
+          </p>
+        </div>
+
         <div>
           <label className="block text-sm font-medium text-gray-700">Current Location</label>
           <div className="mt-1 grid grid-cols-2 gap-4">

@@ -123,7 +123,7 @@ const TripList: React.FC = () => {
     <TripListContainer>
       <TripHeader>
         <TripTitle>All Trips</TripTitle>
-        <NewTripButton to="/new-trip">+ New Trip</NewTripButton>
+        <NewTripButton to="/trip/new">+ New Trip</NewTripButton>
       </TripHeader>
 
       {trips.map((trip) => (
