@@ -28,8 +28,18 @@ class TripViewSet(viewsets.ModelViewSet):
             pickup_coords = f"{trip.pickup_location['longitude']},{trip.pickup_location['latitude']}"
             dropoff_coords = f"{trip.dropoff_location['longitude']},{trip.dropoff_location['latitude']}"
             
-            # Get route from current location to pickup
-            route_url = f"http://router.project-osrm.org/route/v1/driving/{start_coords};{pickup_coords};{dropoff_coords}"
+            # Build route URL with optional fuel stop
+            route_coords = [start_coords, pickup_coords, dropoff_coords]
+            
+            # Check for fuel stop in request data
+            fuel_stop = request.data.get('fuelStop')
+            if fuel_stop and isinstance(fuel_stop, dict):
+                fuel_stop_coords = f"{fuel_stop['longitude']},{fuel_stop['latitude']}"
+                # Insert fuel stop after start location
+                route_coords.insert(1, fuel_stop_coords)
+                print(f"Added fuel stop coordinates: {fuel_stop_coords}")
+            
+            route_url = f"http://router.project-osrm.org/route/v1/driving/{';'.join(route_coords)}"
             params = {
                 'overview': 'full',
                 'geometries': 'geojson',
@@ -70,45 +80,35 @@ class TripViewSet(viewsets.ModelViewSet):
             last_stop_location = trip.current_location
             current_time = datetime.now()
             
-            # Create pickup stop
-            pickup_stop = Stop.objects.create(
-                trip=trip,
-                location=trip.pickup_location,
-                sequence=1,
-                status='pending',
-                stop_type='pickup',
-                arrival_time=current_time + timedelta(seconds=legs[0]['duration']),
-                duration_minutes=60,  # 1 hour for pickup
-                cycle_hours_at_stop=current_cycle_hours + (legs[0]['duration'] / 3600),
-                distance_from_last_stop=legs[0]['distance'] / 1609.34  # Convert meters to miles
-            )
-            print(f"Created pickup stop: {pickup_stop.id}")
-            
-            # Update tracking variables
-            current_cycle_hours += (legs[0]['duration'] / 3600) + (60 / 60)  # Add driving time and pickup duration
-            total_distance += legs[0]['distance'] / 1609.34
-            last_stop_location = trip.pickup_location
-            current_time += timedelta(seconds=legs[0]['duration'] + 3600)  # Add driving time and pickup duration
-            
-            # Create dropoff stop
-            dropoff_stop = Stop.objects.create(
-                trip=trip,
-                location=trip.dropoff_location,
-                sequence=2,
-                status='pending',
-                stop_type='dropoff',
-                arrival_time=current_time + timedelta(seconds=legs[1]['duration']),
-                duration_minutes=60,  # 1 hour for dropoff
-                cycle_hours_at_stop=current_cycle_hours + (legs[1]['duration'] / 3600),
-                distance_from_last_stop=legs[1]['distance'] / 1609.34
-            )
-            print(f"Created dropoff stop: {dropoff_stop.id}")
-            
-            # Update tracking variables
-            current_cycle_hours += (legs[1]['duration'] / 3600) + (60 / 60)
-            total_distance += legs[1]['distance'] / 1609.34
-            last_stop_location = trip.dropoff_location
-            current_time += timedelta(seconds=legs[1]['duration'] + 3600)
+            # Create stops based on legs
+            for i, leg in enumerate(legs):
+                # Determine stop type based on sequence and fuel stop presence
+                if i == 0:
+                    stop_type = 'pickup'
+                elif fuel_stop and i == 1:
+                    stop_type = 'fuel'
+                else:
+                    stop_type = 'dropoff'
+                
+                # Create the stop
+                stop = Stop.objects.create(
+                    trip=trip,
+                    location=last_stop_location,
+                    sequence=i + 1,
+                    status='pending',
+                    stop_type=stop_type,
+                    arrival_time=current_time + timedelta(seconds=leg['duration']),
+                    duration_minutes=60 if stop_type in ['pickup', 'dropoff'] else 30 if stop_type == 'fuel' else 0,
+                    cycle_hours_at_stop=current_cycle_hours + (leg['duration'] / 3600),
+                    distance_from_last_stop=leg['distance'] / 1609.34
+                )
+                print(f"Created {stop_type} stop: {stop.id}")
+                
+                # Update tracking variables
+                current_cycle_hours += (leg['duration'] / 3600) + (stop.duration_minutes / 60)
+                total_distance += leg['distance'] / 1609.34
+                last_stop_location = stop.location
+                current_time += timedelta(seconds=leg['duration'] + (stop.duration_minutes * 60))
             
             # Add rest stops based on HOS compliance
             # Property-carrying driver: 70 hours/8 days, no adverse driving conditions
@@ -120,8 +120,8 @@ class TripViewSet(viewsets.ModelViewSet):
             if current_cycle_hours >= MAX_DRIVING_HOURS:
                 rest_stop = Stop.objects.create(
                     trip=trip,
-                    location=last_stop_location,  # Use last stop location for rest
-                    sequence=3,
+                    location=last_stop_location,
+                    sequence=len(legs) + 1,
                     status='pending',
                     stop_type='rest',
                     arrival_time=current_time,
@@ -133,26 +133,6 @@ class TripViewSet(viewsets.ModelViewSet):
                 # Update tracking variables
                 current_cycle_hours += REQUIRED_REST_HOURS
                 current_time += timedelta(hours=REQUIRED_REST_HOURS)
-            
-            # Add fueling stops every 1000 miles
-            if total_distance >= 1000:
-                fuel_stop = Stop.objects.create(
-                    trip=trip,
-                    location=last_stop_location,  # Use last stop location for fueling
-                    sequence=4,
-                    status='pending',
-                    stop_type='fuel',
-                    arrival_time=current_time,
-                    duration_minutes=30,  # 30 minutes for fueling
-                    cycle_hours_at_stop=current_cycle_hours,
-                    distance_from_last_stop=total_distance
-                )
-                print(f"Created fuel stop: {fuel_stop.id}")
-                
-                # Update tracking variables
-                current_cycle_hours += 0.5  # 30 minutes
-                current_time += timedelta(minutes=30)
-                total_distance = 0  # Reset distance counter
 
             # Create initial log sheet
             log_sheet = LogSheet.objects.create(

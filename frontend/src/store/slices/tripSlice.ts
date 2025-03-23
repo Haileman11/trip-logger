@@ -1,4 +1,5 @@
 import { createSlice, createAsyncThunk } from '@reduxjs/toolkit';
+import { RootState } from '../../store';
 
 interface Location {
   latitude: number;
@@ -6,20 +7,35 @@ interface Location {
 }
 
 export interface Stop {
+  id: number;
+  type: 'pickup' | 'dropoff' | 'fuel' | 'rest';
+  name?: string;
   location: Location;
-  arrival_time?: string;
+  sequence: number;
+  arrival_time: string;
   departure_time?: string;
-  status: string;
+  status: 'pending' | 'current' | 'complete';
+  distance_from_last_stop: number;
+  cycle_hours_at_stop: number;
 }
 
 export interface Trip {
   id: number;
   status: string;
-  current_location?: Location;
-  pickup_location?: Location;
-  dropoff_location?: Location;
+  current_location: Location;
+  pickup_location: Location;
+  dropoff_location: Location;
+  fuel_stop?: Location;
   current_cycle_hours: number;
-  stops?: Stop[];
+  stops: Stop[];
+  route?: {
+    geometry: {
+      type: 'LineString';
+      coordinates: [number, number][];
+    };
+  };
+  required_rest_time: number;
+  rest_stops: number;
 }
 
 interface TripState {
@@ -104,7 +120,13 @@ export const fetchTrip = createAsyncThunk(
 
 export const createTrip = createAsyncThunk(
   'trips/createTrip',
-  async (tripData: Partial<Trip>) => {
+  async (tripData: {
+    current_location: Location;
+    pickup_location: Location;
+    dropoff_location: Location;
+    fuel_stop?: Location;
+    current_cycle_hours: number;
+  }) => {
     const response = await fetch('/api/trips/', {
       method: 'POST',
       headers: {
@@ -119,14 +141,31 @@ export const createTrip = createAsyncThunk(
   }
 );
 
+interface PlanRouteParams {
+  tripId: number;
+  fuelStop?: {
+    latitude: number;
+    longitude: number;
+  };
+}
+
 export const planRoute = createAsyncThunk(
   'trips/planRoute',
-  async ({ tripId }: { tripId: number }) => {
+  async (tripId: number, { getState }) => {
+    const state = getState() as RootState;
+    const trip = state.trips.currentTrip;
+    
     const response = await fetch(`/api/trips/${tripId}/plan_route/`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-      }
+      },
+      body: JSON.stringify({
+        fuelStop: trip?.fuel_stop ? {
+          latitude: trip.fuel_stop.latitude,
+          longitude: trip.fuel_stop.longitude
+        } : undefined
+      })
     });
     if (!response.ok) {
       const errorData = await response.json().catch(() => ({}));

@@ -12,9 +12,10 @@ import LogViewer from './pages/LogViewer';
 import TripPlanner from './pages/TripPlanner';
 import TripList from './components/TripList';
 import DailyLogGrid from './components/DailyLogGrid';
-import { SignUp } from './components/SignUp';
-import Login from './pages/Login';
+import { SignUp } from './pages/SignUp';
+import { Login } from './pages/Login';
 import { LandingPage } from './pages/LandingPage';
+import TripExecution from './pages/TripExecution';
 
 const AppContent: React.FC = () => {
   const location = useLocation();
@@ -70,6 +71,7 @@ const AppContent: React.FC = () => {
           />} />
           <Route path="/signup" element={<SignUp onSignUp={() => {}} />} />
           <Route path="/login" element={<Login  />} />
+          <Route path="/trip/:tripId/live" element={<TripExecution/>} />
         </Routes>
       </main>
     </div>

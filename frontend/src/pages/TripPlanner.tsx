@@ -3,11 +3,20 @@ import { useDispatch, useSelector } from 'react-redux';
 import { createTrip, planRoute } from '../store/slices/tripSlice';
 import type { RootState, AppDispatch } from '../store';
 import { MapContainer, TileLayer, Marker, useMapEvents, Popup, useMap, Polyline } from 'react-leaflet';
-import { FaTruck, FaGasPump, FaBed } from 'react-icons/fa';
+import { FaTruck, FaGasPump, FaBed, FaCheck, FaTimes } from 'react-icons/fa';
 import { BiTimeFive } from 'react-icons/bi';
-import { MdLocationOn } from 'react-icons/md';
+import { MdLocationOn, MdLocalGasStation } from 'react-icons/md';
 import 'leaflet/dist/leaflet.css';
 import L from 'leaflet';
+import { DialogDescription } from '@radix-ui/react-dialog';
+import { DialogHeader } from '@/components/ui/dialog';
+import { DialogContent } from '@/components/ui/dialog';
+import { Dialog } from '@radix-ui/react-dialog';
+import { DialogTitle } from '@radix-ui/react-dialog';
+import { DialogTrigger } from '@/components/ui/dialog';
+import React from 'react';
+import { DialogFooter } from '@/components/ui/dialog';
+import { Button } from '@/components/ui/button';
 
 // Fix for default marker icons in React-Leaflet
 const defaultIcon = new L.Icon({
@@ -39,17 +48,13 @@ const redIcon = new L.Icon({
   shadowSize: [41, 41]
 });
 
-const LocationMarker = ({
-  position,
-  icon,
-  onRemove
-}: {
-  position: L.LatLngTuple;
+const LocationMarker = React.forwardRef<L.Marker, { 
+  position: L.LatLngTuple; 
   icon: L.Icon;
   onRemove?: () => void;
-}) => {
+}>(({ position, icon, onRemove }, ref) => {
   return (
-    <Marker position={position} icon={icon}>
+    <Marker position={position} icon={icon} ref={ref}>
       {onRemove && (
         <Popup>
           <button
@@ -62,11 +67,13 @@ const LocationMarker = ({
       )}
     </Marker>
   );
-};
+});
 
-const MapClickHandler = ({
-  onLocationSelect
-}: {
+LocationMarker.displayName = 'LocationMarker';
+
+const MapClickHandler = ({ 
+  onLocationSelect 
+}: { 
   onLocationSelect: (location: { latitude: number; longitude: number }) => void;
 }) => {
   useMapEvents({
@@ -173,18 +180,145 @@ const RoutePolyline = ({ geometry }: { geometry: GeoJSONLineString }) => {
   );
 };
 
+interface ConfirmationModalProps {
+  isOpen: boolean;
+  distance: string;
+  onClose: () => void;
+  onConfirm: () => void;
+  onAddFuelStop: () => void;
+  isFuelStopRequired: boolean;
+  hasFuelStop: boolean;
+}
+
+const ConfirmationModal = ({
+  isOpen,
+  distance,
+  onClose,
+  onConfirm,
+  onAddFuelStop,
+  isFuelStopRequired,
+  hasFuelStop
+}: ConfirmationModalProps) => {
+  if (!isOpen) return null;
+
+  return (
+    <div className="bg-white rounded-lg p-6 max-w-md w-full mx-4">
+      <h2 className="text-xl font-semibold mb-4">Confirm Trip Plan</h2>
+      <p className="mb-4">Total distance: {distance}</p>
+
+      {isFuelStopRequired && !hasFuelStop && (
+        <div className="bg-yellow-50 border border-yellow-200 rounded-md p-4 mb-4">
+          <div className="flex items-center">
+            <FaGasPump className="text-yellow-600 mr-2" />
+            <p className="text-yellow-700">
+              A fuel stop is required for trips over 1,000 miles.
+            </p>
+          </div>
+        </div>
+      )}
+
+      {!hasFuelStop && !isFuelStopRequired && (
+        <div className="mb-4">
+          <p className="text-gray-600 mb-2">Would you like to add a fuel stop?</p>
+          <button
+            onClick={onAddFuelStop}
+            className="flex items-center justify-center px-4 py-2 border border-yellow-500 text-yellow-600 rounded-md hover:bg-yellow-50 w-full"
+          >
+            <MdLocalGasStation className="mr-2" />
+            Add Fuel Stop
+          </button>
+        </div>
+      )}
+
+      <div className="flex space-x-4">
+        <button
+          onClick={onClose}
+          className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-md hover:bg-gray-50"
+        >
+          <div className="flex items-center justify-center">
+            <FaTimes className="mr-2" />
+            Cancel
+          </div>
+        </button>
+        <button
+          onClick={onConfirm}
+          disabled={isFuelStopRequired && !hasFuelStop}
+          className={`flex-1 px-4 py-2 rounded-md ${isFuelStopRequired && !hasFuelStop
+              ? 'bg-gray-300 cursor-not-allowed'
+              : 'bg-blue-600 hover:bg-blue-700 text-white'
+            }`}
+        >
+          <div className="flex items-center justify-center">
+            <FaCheck className="mr-2" />
+            Confirm
+          </div>
+        </button>
+      </div>
+    </div>
+  );
+};
+
+interface Stop {
+  id: number;
+  type?: 'fuel' | 'rest';
+  location: {
+    latitude: number;
+    longitude: number;
+  };
+  sequence: number;
+  arrival_time: string;
+  departure_time: string | null;
+  status: string;
+}
+
+interface Trip {
+  id: number;
+  current_location: {
+    latitude: number;
+    longitude: number;
+  };
+  pickup_location: {
+    latitude: number;
+    longitude: number;
+  };
+  dropoff_location: {
+    latitude: number;
+    longitude: number;
+  };
+  current_cycle_hours: number;
+  status: string;
+  stops: Stop[];
+  required_rest_time: number;
+  rest_stops: number;
+}
+
+// Update the planRoute action type
+interface PlanRouteParams {
+  tripId: number;
+  fuelStop?: {
+    latitude: number;
+    longitude: number;
+  };
+}
+
 const TripPlanner = () => {
   const dispatch = useDispatch<AppDispatch>();
-  const { currentTrip, loading, error } = useSelector((state: RootState) => state.trips);
+  const { loading, error } = useSelector((state: RootState) => state.trips);
   const [formData, setFormData] = useState({
     current_location: { latitude: 0, longitude: 0 },
     pickup_location: { latitude: 0, longitude: 0 },
     dropoff_location: { latitude: 0, longitude: 0 },
+    fuel_stop: { latitude: 0, longitude: 0 },
     current_cycle_hours: 0,
   });
   const [locationError, setLocationError] = useState<string | null>(null);
   const [isLocationSet, setIsLocationSet] = useState(false);
   const [routeGeometry, setRouteGeometry] = useState<GeoJSONLineString | null>(null);
+  const [isConfirmationOpen, setIsConfirmationOpen] = useState(false);
+  const [hasFuelStop, setHasFuelStop] = useState(false);
+  const [isFuelStopRequired, setIsFuelStopRequired] = useState(false);
+  const [tripData, setTripData] = useState<Trip | null>(null);
+  const [isSelectingFuelStop, setIsSelectingFuelStop] = useState(false);
 
   const [routeData, setRouteData] = useState<RouteData>({
     timeline: [],
@@ -236,6 +370,16 @@ const TripPlanner = () => {
   }, []);
 
   const handleLocationSelect = (location: { latitude: number; longitude: number }) => {
+    if (isSelectingFuelStop) {
+      setFormData(prev => ({
+        ...prev,
+        fuel_stop: location
+      }));
+      setHasFuelStop(true);
+      setIsSelectingFuelStop(false);
+      return;
+    }
+
     if (formData.pickup_location.latitude === 0) {
       setFormData(prev => ({
         ...prev,
@@ -263,19 +407,106 @@ const TripPlanner = () => {
     }));
   };
 
+  const handleAddFuelStop = () => {
+    setIsSelectingFuelStop(true);
+  };
+
+  const handleRemoveFuelStop = () => {
+    setFormData(prev => ({
+      ...prev,
+      fuel_stop: { latitude: 0, longitude: 0 }
+    }));
+    setHasFuelStop(false);
+  };
+
+  const handleConfirmTrip = async () => {
+    if (!tripData?.id) return;
+
+    try {
+      // Plan route
+      const response = await dispatch(planRoute(tripData.id)).unwrap();
+      
+      console.log('Route planned successfully:', response);
+      
+      if (response.route && response.route.code === 'Ok' && response.route.routes && response.route.routes[0]) {
+        const route = response.route.routes[0];
+        
+        // Update route data
+        if (route.geometry && route.geometry.type === 'LineString' && Array.isArray(route.geometry.coordinates)) {
+          setRouteGeometry(route.geometry);
+        }
+
+        // Create timeline entries
+        const timelineEntries: TimelineEntry[] = [];
+        
+        // Add current location as start
+        timelineEntries.push({
+          type: 'start',
+          location: `${formData.current_location.latitude.toFixed(4)}, ${formData.current_location.longitude.toFixed(4)}`,
+          time: new Date().toLocaleString()
+        });
+
+        // Add pickup location
+        timelineEntries.push({
+          type: 'pickup',
+          location: `${formData.pickup_location.latitude.toFixed(4)}, ${formData.pickup_location.longitude.toFixed(4)}`,
+          time: new Date(Date.now() + (route.duration * 1000) / 3).toLocaleString()
+        });
+
+        // Add fuel stop if present
+        if (formData.fuel_stop.latitude !== 0 && formData.fuel_stop.longitude !== 0) {
+          timelineEntries.push({
+            type: 'fuel',
+            location: `${formData.fuel_stop.latitude.toFixed(4)}, ${formData.fuel_stop.longitude.toFixed(4)}`,
+            time: new Date(Date.now() + (route.duration * 1000) / 2).toLocaleString()
+          });
+        }
+
+        // Add dropoff location
+        timelineEntries.push({
+          type: 'dropoff',
+          location: `${formData.dropoff_location.latitude.toFixed(4)}, ${formData.dropoff_location.longitude.toFixed(4)}`,
+          time: new Date(Date.now() + route.duration * 1000).toLocaleString()
+        });
+
+        // Update route data
+        setRouteData({
+          timeline: timelineEntries,
+          eldLogs: {
+            drivingTime: formatDuration(route.duration || 0),
+            onDuty: formatDuration((route.duration || 0) * 1.2),
+            restTime: formatDuration(tripData.required_rest_time || 0)
+          },
+          summary: {
+            totalDistance: formatDistance(route.distance || 0),
+            estimatedDuration: formatDuration(route.duration || 0),
+            fuelStops: formData.fuel_stop.latitude !== 0 ? 1 : 0,
+            restStops: tripData.rest_stops || 0
+          }
+        });
+      }
+      
+      // Close the confirmation modal
+      setIsConfirmationOpen(false);
+    } catch (err) {
+      console.error('Failed to plan route:', err);
+      setLocationError('Failed to plan route. Please try again.');
+    }
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
       // Validate coordinates
       const validateLocation = (loc: { latitude: number; longitude: number }) => {
         return !isNaN(loc.latitude) && !isNaN(loc.longitude) &&
-          loc.latitude >= -90 && loc.latitude <= 90 &&
-          loc.longitude >= -180 && loc.longitude <= 180;
+               loc.latitude >= -90 && loc.latitude <= 90 &&
+               loc.longitude >= -180 && loc.longitude <= 180;
       };
 
       if (!validateLocation(formData.current_location) ||
-        !validateLocation(formData.pickup_location) ||
-        !validateLocation(formData.dropoff_location)) {
+          !validateLocation(formData.pickup_location) ||
+          !validateLocation(formData.dropoff_location)) {
         setLocationError('Please enter valid coordinates for all locations');
         return;
       }
@@ -285,107 +516,23 @@ const TripPlanner = () => {
         return;
       }
 
-      console.log('Creating trip with data:', formData);
-      const result = await dispatch(createTrip(formData)).unwrap();
+      // Create trip with all locations
+      const tripPayload = {
+        ...formData,
+        fuel_stop: hasFuelStop ? formData.fuel_stop : undefined
+      };
+
+      console.log('Creating trip with data:', tripPayload);
+      const result = await dispatch(createTrip(tripPayload)).unwrap();
       console.log('Trip created:', result);
-
+      
       if (result.id) {
-        console.log('Planning route for trip ID:', result.id);
-        const response = await dispatch(planRoute({
-          tripId: result.id
-        })).unwrap();
-
-        console.log('Route planned successfully:', response);
-        console.log('Full route response:', JSON.stringify(response, null, 2));
-
-        if (response.route && response.route.code === 'Ok' && response.route.routes && response.route.routes[0]) {
-          const route = response.route.routes[0];
-
-          // Check if we have valid geometry
-          if (route.geometry && route.geometry.type === 'LineString' && Array.isArray(route.geometry.coordinates)) {
-            console.log('Found route geometry:', route.geometry);
-            setRouteGeometry(route.geometry);
-          } else {
-            console.warn('Invalid or missing route geometry in response');
-          }
-
-          // Create timeline entries from waypoints and stops
-          const timelineEntries: TimelineEntry[] = [];
-
-          // Add current location as start
-          timelineEntries.push({
-            type: 'start',
-            location: `${formData.current_location.latitude.toFixed(4)}, ${formData.current_location.longitude.toFixed(4)}`,
-            time: new Date().toLocaleString()
-          });
-
-          // Add pickup location
-          timelineEntries.push({
-            type: 'pickup',
-            location: `${formData.pickup_location.latitude.toFixed(4)}, ${formData.pickup_location.longitude.toFixed(4)}`,
-            time: new Date(Date.now() + (route.duration * 1000) / 3).toLocaleString()
-          });
-
-          // Process stops and add them to timeline
-          if (response.stops) {
-            response.stops.forEach((stop: any) => {
-              // Ensure stop type matches our TimelineEntry type
-              const stopType = (stop.type === 'fuel' || stop.type === 'rest')
-                ? stop.type as 'fuel' | 'rest'
-                : 'location' as const;
-
-              timelineEntries.push({
-                type: stopType,
-                location: `${stop.location.latitude.toFixed(4)}, ${stop.location.longitude.toFixed(4)}`,
-                time: new Date(stop.estimated_time).toLocaleString()
-              });
-            });
-          }
-
-          // Add waypoints from the route
-          if (response.route.waypoints) {
-            response.route.waypoints.forEach((waypoint: any, index: number) => {
-              if (index !== 0 && index !== response.route.waypoints.length - 1) {
-                timelineEntries.push({
-                  type: 'waypoint',
-                  location: `${waypoint.location[1].toFixed(4)}, ${waypoint.location[0].toFixed(4)}`,
-                  time: new Date(Date.now() + (route.duration * 1000 * (index / response.route.waypoints.length))).toLocaleString()
-                });
-              }
-            });
-          }
-
-          // Add dropoff location as final destination
-          timelineEntries.push({
-            type: 'dropoff',
-            location: `${formData.dropoff_location.latitude.toFixed(4)}, ${formData.dropoff_location.longitude.toFixed(4)}`,
-            time: new Date(Date.now() + route.duration * 1000).toLocaleString()
-          });
-
-          // Sort timeline entries by time
-          timelineEntries.sort((a, b) => new Date(a.time).getTime() - new Date(b.time).getTime());
-
-          // Update route data with the OSRM response
-          setRouteData({
-            timeline: timelineEntries,
-            eldLogs: {
-              drivingTime: formatDuration(route.duration || 0),
-              onDuty: formatDuration((route.duration || 0) * 1.2),
-              restTime: formatDuration(response.trip.required_rest_time || 0)
-            },
-            summary: {
-              totalDistance: formatDistance(route.distance || 0),
-              estimatedDuration: formatDuration(route.duration || 0),
-              fuelStops: response.trip.fuel_stops || 0,
-              restStops: response.trip.rest_stops || 0
-            }
-          });
-        } else {
-          throw new Error('Invalid route response from API');
-        }
+        // Store the trip data and show confirmation modal
+        setTripData(result);
+        setIsConfirmationOpen(true);
       }
     } catch (err) {
-      console.error('Failed to create or plan trip:', err);
+      console.error('Failed to create trip:', err);
       if (err instanceof Error) {
         setLocationError(err.message);
       } else {
@@ -395,7 +542,7 @@ const TripPlanner = () => {
   };
 
   // Default center for the map
-  const defaultCenter: L.LatLngTuple = isLocationSet
+  const defaultCenter: L.LatLngTuple = isLocationSet 
     ? [formData.current_location.latitude, formData.current_location.longitude]
     : [9.0248826, 38.7807792]; // Default to Addis Ababa coordinates
 
@@ -405,7 +552,7 @@ const TripPlanner = () => {
       <div className="flex items-center justify-between mb-8">
         <h1 className="text-2xl font-bold text-gray-900">Plan New Trip</h1>
       </div>
-
+      
       {locationError && (
         <div className="bg-red-50 border border-red-200 text-red-600 px-4 py-3 rounded-md mb-4">
           {locationError}
@@ -537,7 +684,33 @@ const TripPlanner = () => {
                   </div>
                 </div>
               </div>
-
+              {/* Add Fuel Stop Button */}
+              <div className="flex items-center justify-between">
+                <div className="flex items-center space-x-2">
+                  <FaGasPump className="w-5 h-5 text-gray-400" />
+                  <span className="text-gray-600">Fuel Stop</span>
+                </div>
+                {!hasFuelStop ? (
+                  <button
+                    type="button"
+                    onClick={handleAddFuelStop}
+                    className="flex items-center justify-center px-4 py-2 border border-yellow-500 text-yellow-600 rounded-md hover:bg-yellow-50"
+                  >
+                    <MdLocalGasStation className="mr-2" />
+                    Add Fuel Stop
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={handleRemoveFuelStop}
+                    className="flex items-center justify-center px-4 py-2 border border-red-500 text-red-600 rounded-md hover:bg-red-50"
+                  >
+                    <FaTimes className="mr-2" />
+                    Remove Fuel Stop
+                  </button>
+                )}
+              </div>
+              {/* Current Cycle Hours Input */}
               <div>
                 <label htmlFor="current_cycle_hours" className="block text-sm font-medium text-gray-700">
                   Current Cycle Hours
@@ -557,7 +730,7 @@ const TripPlanner = () => {
                   placeholder="Enter hours worked in cycle"
                 />
               </div>
-
+              {/* Generate Route Button */}
               <button
                 type="submit"
                 disabled={loading}
@@ -565,6 +738,53 @@ const TripPlanner = () => {
               >
                 {loading ? 'Planning...' : 'Generate Route Plan'}
               </button>
+              <Dialog open={isConfirmationOpen} onOpenChange={setIsConfirmationOpen}>
+                <DialogContent className="sm:max-w-[425px]">
+                  <DialogHeader>
+                    <DialogTitle>Confirm Trip Details</DialogTitle>
+                    <DialogDescription>
+                      Please review the trip details before generating the route plan.
+                    </DialogDescription>
+                  </DialogHeader>
+                  <div className="grid gap-4 py-4">
+                    <div className="space-y-2">
+                      <h3 className="text-lg font-semibold">Route Summary</h3>
+                      <div className="space-y-1">
+                        <p>Total Distance: {formatDistance(Number(routeData.summary.totalDistance))}</p>
+                        <p>Estimated Duration: {routeData.summary.estimatedDuration}</p>
+                        <p>Fuel Stops: {routeData.summary.fuelStops}</p>
+                        <p>Rest Stops: {routeData.summary.restStops}</p>
+                      </div>
+                    </div>
+                    <div className="space-y-2">
+                      <h3 className="text-lg font-semibold">ELD Logs</h3>
+                      <div className="space-y-1">
+                        <p>Driving Time: {routeData.eldLogs.drivingTime}</p>
+                        <p>On Duty Time: {routeData.eldLogs.onDuty}</p>
+                        <p>Rest Time: {routeData.eldLogs.restTime}</p>
+                      </div>
+                    </div>
+                    <div className="space-y-2">
+                      <h3 className="text-lg font-semibold">Timeline</h3>
+                      <div className="space-y-1">
+                        {routeData.timeline.map((entry, index) => (
+                          <div key={index} className="flex items-center gap-2">
+                            <span className="font-medium">{entry.type}:</span>
+                            <span>{entry.location}</span>
+                            <span className="text-gray-500">({entry.time})</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                  <DialogFooter>
+                    <DialogTrigger asChild>
+                      <Button variant="outline">Cancel</Button>
+                    </DialogTrigger>
+                    <Button onClick={handleConfirmTrip}>Confirm</Button>
+                  </DialogFooter>
+                </DialogContent>
+              </Dialog>
             </div>
           </form>
         </div>
@@ -576,6 +796,7 @@ const TripPlanner = () => {
               center={defaultCenter}
               zoom={4}
               className="h-full w-full"
+              style={{ zIndex: 1 }}
               scrollWheelZoom={false}
             >
               <TileLayer
@@ -591,42 +812,60 @@ const TripPlanner = () => {
 
               {/* Update RoutePolyline rendering */}
               {routeGeometry && <RoutePolyline geometry={routeGeometry} />}
-
+              
               {/* Current Location Marker */}
               {isLocationSet && (
-                <LocationMarker
-                  position={[formData.current_location.latitude, formData.current_location.longitude]}
+                <LocationMarker 
+                  position={[formData.current_location.latitude, formData.current_location.longitude]} 
                   icon={defaultIcon}
                 />
               )}
-
+              
               {/* Pickup Location Marker */}
               {formData.pickup_location.latitude !== 0 && (
-                <LocationMarker
-                  position={[formData.pickup_location.latitude, formData.pickup_location.longitude]}
+                <LocationMarker 
+                  position={[formData.pickup_location.latitude, formData.pickup_location.longitude]} 
                   icon={greenIcon}
                   onRemove={handleRemovePickup}
                 />
               )}
-
+              
               {/* Dropoff Location Marker */}
               {formData.dropoff_location.latitude !== 0 && (
-                <LocationMarker
-                  position={[formData.dropoff_location.latitude, formData.dropoff_location.longitude]}
+                <LocationMarker 
+                  position={[formData.dropoff_location.latitude, formData.dropoff_location.longitude]} 
                   icon={redIcon}
                   onRemove={handleRemoveDropoff}
+                />
+              )}
+
+              {/* Fuel Stop Marker */}
+              {hasFuelStop && formData.fuel_stop.latitude !== 0 && (
+                <LocationMarker
+                  position={[formData.fuel_stop.latitude, formData.fuel_stop.longitude]}
+                  icon={new L.Icon({
+                    iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-yellow.png',
+                    shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-shadow.png',
+                    iconSize: [25, 41],
+                    iconAnchor: [12, 41],
+                    popupAnchor: [1, -34],
+                    shadowSize: [41, 41]
+                  })}
+                  onRemove={handleRemoveFuelStop}
                 />
               )}
             </MapContainer>
           </div>
           <p className="p-4 text-sm text-gray-500">
-            Click on the map to set pickup (green) and dropoff (red) locations. Click on a marker to remove it.
+            {isSelectingFuelStop
+              ? 'Click on the map to add a fuel stop location'
+              : 'Click on the map to set pickup (green) and dropoff (red) locations. Click on a marker to remove it.'}
           </p>
         </div>
       </div>
 
       {/* Bottom Sections */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mt-8">
+      {tripData && routeData && <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mt-8">
         {/* Route Timeline */}
         <div className="bg-white rounded-lg shadow-sm p-6">
           <h2 className="text-lg font-semibold mb-4">Route Timeline</h2>
@@ -665,7 +904,7 @@ const TripPlanner = () => {
                     </div>
                   )}
                 </div>
-                <div>
+        <div>
                   <p className="font-medium text-gray-900">{stop.location}</p>
                   <p className="text-sm text-gray-500">{stop.time}</p>
                 </div>
@@ -691,20 +930,20 @@ const TripPlanner = () => {
               <div className="flex justify-between items-center mb-1">
                 <span className="text-sm text-gray-600">On Duty</span>
                 <span className="text-sm font-medium">{routeData.eldLogs.onDuty}</span>
-              </div>
+            </div>
               <div className="w-full bg-gray-200 rounded-full h-2">
                 <div className="bg-yellow-500 h-2 rounded-full" style={{ width: '30%' }}></div>
-              </div>
-            </div>
-            <div>
+          </div>
+        </div>
+        <div>
               <div className="flex justify-between items-center mb-1">
                 <span className="text-sm text-gray-600">Rest Time</span>
                 <span className="text-sm font-medium">{routeData.eldLogs.restTime}</span>
               </div>
               <div className="w-full bg-gray-200 rounded-full h-2">
                 <div className="bg-blue-500 h-2 rounded-full" style={{ width: '50%' }}></div>
-              </div>
-            </div>
+          </div>
+        </div>
           </div>
         </div>
 
@@ -718,21 +957,21 @@ const TripPlanner = () => {
                 <span className="text-gray-600">Total Distance</span>
               </div>
               <span className="font-medium">{routeData.summary.totalDistance}</span>
-            </div>
+        </div>
             <div className="flex items-center justify-between">
               <div className="flex items-center space-x-2">
                 <BiTimeFive className="w-5 h-5 text-gray-400" />
                 <span className="text-gray-600">Est. Duration</span>
-              </div>
+          </div>
               <span className="font-medium">{routeData.summary.estimatedDuration}</span>
-            </div>
+          </div>
             <div className="flex items-center justify-between">
               <div className="flex items-center space-x-2">
                 <FaGasPump className="w-5 h-5 text-gray-400" />
                 <span className="text-gray-600">Fuel Stops</span>
-              </div>
+                </div>
               <span className="font-medium">{routeData.summary.fuelStops}</span>
-            </div>
+                </div>
             <div className="flex items-center justify-between">
               <div className="flex items-center space-x-2">
                 <FaBed className="w-5 h-5 text-gray-400" />
@@ -742,7 +981,7 @@ const TripPlanner = () => {
             </div>
           </div>
         </div>
-      </div>
+      </div>}
     </div>
   );
 };

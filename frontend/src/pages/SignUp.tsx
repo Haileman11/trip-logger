@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { FcGoogle } from 'react-icons/fc';
-import { FaApple } from 'react-icons/fa';
+import { FaApple, FaTruck } from 'react-icons/fa';
 import { AiOutlineEye, AiOutlineEyeInvisible } from 'react-icons/ai';
 
 interface SignUpProps {
@@ -38,36 +38,18 @@ export const SignUp = ({ onSignUp }: SignUpProps) => {
     <div className="w-full max-w-md mx-auto p-6 bg-white rounded-lg shadow-sm">
       <div className="flex flex-col items-center mb-6">
         <div className="w-12 h-12 bg-indigo-600 rounded-lg flex items-center justify-center mb-4">
-          <div className="w-6 h-6 bg-white rounded"></div>
+        <FaTruck className="h-8 w-8 text-white" />
         </div>
         <h2 className="text-2xl font-semibold text-gray-900">Create an account</h2>
         <p className="mt-2 text-sm text-gray-600">
           Already have an account?{' '}
-          <a href="/signin" className="text-indigo-600 hover:text-indigo-500">
+          <a href="/login" className="text-indigo-600 hover:text-indigo-500">
             Sign in
           </a>
         </p>
       </div>
 
       <div className="space-y-4">
-        <button className="w-full flex items-center justify-center gap-3 px-4 py-2 border border-gray-300 rounded-md text-gray-700 bg-white hover:bg-gray-50">
-          <FcGoogle className="w-5 h-5" />
-          Continue with Google
-        </button>
-
-        <button className="w-full flex items-center justify-center gap-3 px-4 py-2 border border-gray-300 rounded-md text-gray-700 bg-white hover:bg-gray-50">
-          <FaApple className="w-5 h-5" />
-          Continue with Apple
-        </button>
-
-        <div className="relative">
-          <div className="absolute inset-0 flex items-center">
-            <div className="w-full border-t border-gray-300"></div>
-          </div>
-          <div className="relative flex justify-center text-sm">
-            <span className="px-2 bg-white text-gray-500">Or continue with</span>
-          </div>
-        </div>
 
         <form onSubmit={handleSubmit} className="space-y-4">
           <div className="grid grid-cols-2 gap-4">
