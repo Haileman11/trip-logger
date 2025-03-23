@@ -15,12 +15,23 @@ class Trip(models.Model):
         return f"Trip {self.id} - {self.status}"
 
 class Stop(models.Model):
+    STOP_TYPES = [
+        ('pickup', 'Pickup'),
+        ('dropoff', 'Dropoff'),
+        ('rest', 'Rest Stop'),
+        ('fuel', 'Fuel Stop'),
+    ]
+
     trip = models.ForeignKey(Trip, related_name='stops', on_delete=models.CASCADE)
     location = models.JSONField()
     sequence = models.IntegerField()
     arrival_time = models.DateTimeField(null=True, blank=True)
     departure_time = models.DateTimeField(null=True, blank=True)
     status = models.CharField(max_length=20, default='pending')
+    stop_type = models.CharField(max_length=10, choices=STOP_TYPES, default='pickup')
+    duration_minutes = models.IntegerField(default=0)  # Duration of the stop
+    cycle_hours_at_stop = models.FloatField(null=True, blank=True)  # Hours in cycle when arriving at stop
+    distance_from_last_stop = models.FloatField(null=True, blank=True)  # Distance in miles from previous stop
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -28,7 +39,7 @@ class Stop(models.Model):
         ordering = ['sequence']
 
     def __str__(self):
-        return f"Stop {self.sequence} - Trip {self.trip.id}"
+        return f"{self.get_stop_type_display()} {self.sequence} - Trip {self.trip.id}"
 
 class LogSheet(models.Model):
     trip = models.ForeignKey(Trip, related_name='log_sheets', on_delete=models.CASCADE)

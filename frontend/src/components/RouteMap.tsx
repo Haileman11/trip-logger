@@ -3,7 +3,6 @@ import { MapContainer, TileLayer, Marker, Popup, Polyline, useMap } from 'react-
 import 'leaflet/dist/leaflet.css';
 import L from 'leaflet';
 import ErrorBoundary from './ErrorBoundary';
-
 import { leafletIcons } from '../utils/leaflet-icons';
 
 // Fix for default marker icons in React-Leaflet
@@ -23,6 +22,10 @@ interface Stop {
   id: string;
   location: Location;
   arrival_time: string;
+  stop_type: 'pickup' | 'dropoff' | 'rest' | 'fuel';
+  duration_minutes: number;
+  cycle_hours_at_stop: number;
+  distance_from_last_stop: number;
 }
 
 interface RouteGeometry {
@@ -55,6 +58,36 @@ const MapBoundsUpdater = ({ bounds }: MapBoundsUpdaterProps) => {
   }, [bounds, map]);
 
   return null;
+};
+
+const getStopIcon = (stopType: Stop['stop_type']) => {
+  switch (stopType) {
+    case 'pickup':
+      return leafletIcons.greenIcon;
+    case 'dropoff':
+      return leafletIcons.redIcon;
+    case 'rest':
+      return leafletIcons.blueIcon;
+    case 'fuel':
+      return leafletIcons.yellowIcon;
+    default:
+      return leafletIcons.defaultIcon;
+  }
+};
+
+const getStopTitle = (stopType: Stop['stop_type']) => {
+  switch (stopType) {
+    case 'pickup':
+      return 'Pickup Stop';
+    case 'dropoff':
+      return 'Dropoff Stop';
+    case 'rest':
+      return 'Rest Stop';
+    case 'fuel':
+      return 'Fuel Stop';
+    default:
+      return 'Stop';
+  }
 };
 
 const RouteMap = ({ route, stops, currentLocation }: RouteMapProps) => {
@@ -154,12 +187,19 @@ const RouteMap = ({ route, stops, currentLocation }: RouteMapProps) => {
               <Marker
                 key={stop.id}
                 position={[stopLat, stopLng] as L.LatLngTuple}
-                icon={index === 0 ? leafletIcons.greenIcon : leafletIcons.redIcon}
+                icon={getStopIcon(stop.stop_type)}
               >
                 <Popup>
                   <div className="p-2">
-                    <h3 className="font-semibold">{index === 0 ? 'Pickup' : 'Dropoff'} Stop</h3>
-                    <p className="text-sm">Arrival: {new Date(stop.arrival_time).toLocaleString()}</p>
+                    <h3 className="font-semibold">{getStopTitle(stop.stop_type)}</h3>
+                    <div className="mt-2 space-y-1 text-sm">
+                      <p>Arrival: {new Date(stop.arrival_time).toLocaleString()}</p>
+                      <p>Duration: {stop.duration_minutes} minutes</p>
+                      <p>Cycle Hours: {stop.cycle_hours_at_stop.toFixed(1)}</p>
+                      {stop.distance_from_last_stop > 0 && (
+                        <p>Distance from last stop: {stop.distance_from_last_stop.toFixed(1)} miles</p>
+                      )}
+                    </div>
                   </div>
                 </Popup>
               </Marker>
