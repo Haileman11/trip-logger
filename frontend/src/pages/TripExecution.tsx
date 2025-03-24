@@ -1,177 +1,378 @@
 import React, { useEffect, useState } from 'react';
-import { useParams } from 'react-router-dom';
-import { useSelector, useDispatch } from 'react-redux';
-import { RootState, AppDispatch } from '../store';
-import { fetchTrip } from '../store/slices/tripSlice';
+import { useParams, useNavigate } from 'react-router-dom';
+import { useDispatch, useSelector } from 'react-redux';
 import { format } from 'date-fns';
-import { FaTruck, FaBed, FaGasPump } from 'react-icons/fa';
-import { BiTimeFive } from 'react-icons/bi';
-import { MdLocationOn } from 'react-icons/md';
+import { fetchTrip, updateStopStatus, completeTrip, planRoute } from '../store/slices/tripSlice';
+import { RootState, AppDispatch } from '../store';
 import TripMap from '../components/TripMap';
-import EldLogs from '../components/EldLogs';
+import StopStatusUpdate from '../components/StopStatusUpdate';
+import DutyStatusControl from '../components/DutyStatusControl';
+import { Location, Stop } from '../types';
 
-const TripExecution = () => {
+type DutyStatus = 'driving' | 'on_duty' | 'sleeper_berth' | 'off_duty';
+type TripStatus = 'not_started' | 'in_progress' | 'completed';
+
+interface StatusLog {
+  status: DutyStatus;
+  timestamp: Date;
+}
+
+const TripExecution: React.FC = () => {
   const { tripId } = useParams<{ tripId: string }>();
+  const navigate = useNavigate();
   const dispatch = useDispatch<AppDispatch>();
-  const trip = useSelector((state: RootState) => state.trips.currentTrip);
-  const [currentLocation, setCurrentLocation] = useState<[number, number] | null>(null);
+  const { currentTrip: trip, loading, error } = useSelector((state: RootState) => state.trips);
+  
+  const [currentLocation, setCurrentLocation] = useState<Location | undefined>(undefined);
+  const [currentStatus, setCurrentStatus] = useState<DutyStatus>('off_duty');
+  const [tripStatus, setTripStatus] = useState<TripStatus>('not_started');
+  const [drivingHours, setDrivingHours] = useState(0);
+  const [onDutyHours, setOnDutyHours] = useState(0);
+  const [statusLogs, setStatusLogs] = useState<StatusLog[]>([]);
+  const [currentStopIndex, setCurrentStopIndex] = useState(0);
+  const [isWithinRange, setIsWithinRange] = useState(false);
+  const [timeRemaining, setTimeRemaining] = useState(3600); // 1 hour in seconds
+  const [isUpdating, setIsUpdating] = useState(false);
 
+  // Fetch trip data and plan route
   useEffect(() => {
-    if (tripId) {
-      dispatch(fetchTrip(tripId));
-    }
+    const fetchTripData = async () => {
+      if (tripId) {
+        try {
+          // Fetch trip details
+          const result = await dispatch(fetchTrip(tripId)).unwrap();
+          
+          // Set initial trip status
+          setTripStatus(result.status === 'completed' ? 'completed' : 'not_started');
+          
+          // Plan route if trip is in planned status and has no route
+          if (result.status === 'planned' && !result.route) {
+            await dispatch(planRoute(parseInt(tripId))).unwrap();
+          }
+        } catch (error) {
+          console.error('Error fetching trip data:', error);
+        }
+      }
+    };
+
+    fetchTripData();
   }, [tripId, dispatch]);
 
+  // Initialize current location
   useEffect(() => {
-    // Simulate real-time location updates
+    if (trip?.current_location && 
+        typeof trip.current_location.latitude === 'number' && 
+        typeof trip.current_location.longitude === 'number' && 
+        !currentLocation) {
+      setCurrentLocation(trip.current_location);
+    }
+  }, [trip, currentLocation]);
+
+  // Simulate location updates
+  useEffect(() => {
+    if (tripStatus !== 'in_progress') return;
+
     const interval = setInterval(() => {
-      if (trip?.current_location) {
-        // Add small random movement for simulation
-        setCurrentLocation([
-          trip.current_location.latitude + (Math.random() - 0.5) * 0.001,
-          trip.current_location.longitude + (Math.random() - 0.5) * 0.001
-        ]);
+      if (currentLocation && trip?.route?.routes?.[0]?.geometry?.coordinates) {
+        // Get next point, ensuring it has valid coordinates
+        const nextPointIndex = Math.min(currentStopIndex + 1, trip.route.routes[0].geometry.coordinates.length - 1);
+        const nextPoint = trip.route.routes[0].geometry.coordinates[nextPointIndex];
+        
+        if (Array.isArray(nextPoint) && nextPoint.length === 2) {
+          const [lng, lat] = nextPoint;
+          // Update location
+          const updatedLocation: Location = {
+            latitude: currentLocation.latitude + (lat - currentLocation.latitude) ,
+            longitude: currentLocation.longitude + (lng - currentLocation.longitude)  
+          };
+          console.log('Updated location:', updatedLocation);
+          setCurrentLocation(updatedLocation);
+
+          // Check if within range of current stop
+          if (trip.stops?.[currentStopIndex]?.location) {
+            const currentStop = trip.stops[currentStopIndex];
+            const distance = calculateDistance(updatedLocation, currentStop.location);
+            setIsWithinRange(distance <= 0.5); // Within 0.5 miles
+          }
+        }
       }
     }, 5000);
 
     return () => clearInterval(interval);
-  }, [trip]);
+  }, [currentLocation, trip, currentStopIndex, tripStatus]);
 
-  if (!trip) {
-    return <div>Loading...</div>;
+  // Update duty hours
+  useEffect(() => {
+    const interval = setInterval(() => {
+      if (currentStatus === 'driving') {
+        setDrivingHours(prev => prev + 1/3600);
+        setOnDutyHours(prev => prev + 1/3600);
+      } else if (currentStatus === 'on_duty') {
+        setOnDutyHours(prev => prev + 1/3600);
+      }
+    }, 1000);
+
+    return () => clearInterval(interval);
+  }, [currentStatus]);
+
+  // Update time remaining for stop confirmation
+  useEffect(() => {
+    if (isWithinRange && timeRemaining > 0) {
+      const interval = setInterval(() => {
+        setTimeRemaining(prev => Math.max(0, prev - 1));
+      }, 1000);
+      return () => clearInterval(interval);
+    }
+  }, [isWithinRange, timeRemaining]);
+
+  const handleStatusChange = (status: DutyStatus) => {
+    setCurrentStatus(status);
+    setStatusLogs(prev => [
+      { status, timestamp: new Date() },
+      ...prev
+    ]);
+  };
+
+  const handleStopConfirmation = async () => {
+    if (!trip?.stops || !tripId || isUpdating) return;
+    
+    setIsUpdating(true);
+    try {
+      const currentStop = trip.stops[currentStopIndex];
+      await dispatch(updateStopStatus({ 
+        tripId, 
+        stopId: currentStop.id, 
+        status: 'completed' 
+      })).unwrap();
+      
+      // Fetch updated trip data
+      await dispatch(fetchTrip(tripId)).unwrap();
+      
+      if (currentStopIndex < trip.stops.length - 1) {
+        setCurrentStopIndex(prev => prev + 1);
+        setTimeRemaining(3600);
+      } else {
+        // Trip completed
+        await dispatch(completeTrip(tripId)).unwrap();
+        navigate('/trips');
+      }
+    } catch (error) {
+      console.error('Failed to update stop status:', error);
+      // You might want to show an error message to the user here
+    } finally {
+      setIsUpdating(false);
+    }
+  };
+
+  const handleSkipStop = async () => {
+    if (!trip?.stops || !tripId || isUpdating) return;
+    
+    setIsUpdating(true);
+    try {
+      const currentStop = trip.stops[currentStopIndex];
+      await dispatch(updateStopStatus({ 
+        tripId, 
+        stopId: currentStop.id, 
+        status: 'skipped' 
+      })).unwrap();
+      
+      if (currentStopIndex < trip.stops.length - 1) {
+        setCurrentStopIndex(prev => prev + 1);
+        setTimeRemaining(3600);
+      } else {
+        // Trip completed
+        await dispatch(completeTrip(tripId)).unwrap();
+        navigate('/trips');
+      }
+    } catch (error) {
+      console.error('Failed to skip stop:', error);
+      // You might want to show an error message to the user here
+    } finally {
+      setIsUpdating(false);
+    }
+  };
+
+  const handleStartTrip = () => {
+    setTripStatus('in_progress');
+    setCurrentStatus('driving');
+    setStatusLogs(prev => [
+      { status: 'driving', timestamp: new Date() },
+      ...prev
+    ]);
+  };
+
+  const calculateDistance = (loc1: Location, loc2: Location): number => {
+    // Haversine formula implementation
+    const R = 3959; // Earth's radius in miles
+    const dLat = (loc2.latitude - loc1.latitude) * Math.PI / 180;
+    const dLon = (loc2.longitude - loc1.longitude) * Math.PI / 180;
+    const a = 
+      Math.sin(dLat/2) * Math.sin(dLat/2) +
+      Math.cos(loc1.latitude * Math.PI / 180) * Math.cos(loc2.latitude * Math.PI / 180) * 
+      Math.sin(dLon/2) * Math.sin(dLon/2);
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+    return R * c;
+  };
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <div className="text-xl text-gray-600">Loading trip details...</div>
+      </div>
+    );
   }
 
-  if (!trip.stops) {
-    return <div>No stops found for this trip.</div>;
+  if (error) {
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <div className="text-xl text-red-600">Error: {error}</div>
+      </div>
+    );
   }
 
-  const currentStop = trip.stops.find(stop => stop?.status === 'current');
-  const nextStop = trip.stops.find(stop => stop?.status === 'pending');
+  if (!trip || !trip.stops) {
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <div className="text-xl text-gray-600">No trip data available</div>
+      </div>
+    );
+  }
+
+  const currentStop = trip.stops[currentStopIndex];
 
   return (
-    <div className="max-w-7xl mx-auto p-6 space-y-6">
-      {/* Current Trip Status */}
-      <div className="bg-white rounded-lg shadow-sm p-6">
-        <div className="flex items-center justify-between">
-          <h2 className="text-xl font-semibold">Current Trip Status</h2>
-          <span className="px-3 py-1 bg-green-100 text-green-800 rounded-full text-sm">
-            {trip.status}
-          </span>
-        </div>
-        <div className="grid grid-cols-3 gap-8 mt-4">
+    <div className="container mx-auto p-4 space-y-8">
+      {/* Trip Status Banner */}
+      <div className="bg-white rounded-lg shadow-lg p-4">
+        <div className="flex justify-between items-center">
           <div>
-            <p className="text-sm text-gray-600">Time Driven</p>
-            <p className="text-2xl font-semibold">4h 23m</p>
-          </div>
-          <div>
-            <p className="text-sm text-gray-600">Distance</p>
-            <p className="text-2xl font-semibold">234 mi</p>
-          </div>
-          <div>
-            <p className="text-sm text-gray-600">ETA</p>
-            <p className="text-2xl font-semibold">
-              {format(new Date(), 'h:mm a')}
+            <h2 className="text-xl font-bold">Trip Status: {tripStatus}</h2>
+            <p className="text-sm text-gray-600">
+              Trip ID: {trip.id} | Current Stop: {currentStopIndex + 1} of {trip.stops.length}
             </p>
           </div>
+          {tripStatus === 'not_started' && (
+            <button
+              onClick={handleStartTrip}
+              className="bg-green-600 text-white px-6 py-2 rounded-lg hover:bg-green-700"
+            >
+              Start Trip
+            </button>
+          )}
         </div>
       </div>
 
-      {/* Map Section */}
-      <div className="bg-white rounded-lg shadow-sm overflow-hidden h-[400px]">
-        <TripMap
-          currentLocation={currentLocation || undefined}
-          route={trip.route?.geometry}
-          nextStop={nextStop && nextStop.location ? {
-            location: [nextStop.location.latitude, nextStop.location.longitude],
-            name: `${nextStop.type || 'Stop'} - ${nextStop.name || ''}`
-          } : undefined}
-        />
-      </div>
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+        {/* Map Section */}
+        <div className="bg-white rounded-lg shadow-lg p-4 col-span-2">
+          <h2 className="text-xl font-bold mb-4">Trip Progress</h2>
+          <TripMap
+            currentLocation={currentLocation || trip.current_location}
+            route={trip.route}
+            stops={trip.stops || []}
+            currentStopIndex={currentStopIndex}
+            tripStatus={tripStatus}
+          />
+        </div>
 
-      {/* Next Stop */}
-      {nextStop && nextStop.location && (
-        <div className="bg-white rounded-lg shadow-sm p-6">
-          <div className="flex items-center justify-between">
-            <div>
-              <h3 className="text-lg font-semibold">Next Stop</h3>
-              <p className="text-gray-600">{nextStop.name || nextStop.type || 'Stop'}</p>
-            </div>
-            <div className="text-right">
-              <p className="text-lg font-semibold">
-                {Math.round(nextStop.distance_from_last_stop || 0)} mi
-              </p>
-              <p className="text-gray-600">
-                {nextStop.arrival_time ? format(new Date(nextStop.arrival_time), 'h:mm a') : '--:--'}
-              </p>
-            </div>
+        {/* Stops List Section */}
+        <div className="bg-white rounded-lg shadow-lg p-4">
+          <h2 className="text-xl font-bold mb-4">Stops</h2>
+          <div className="space-y-4">
+            {trip.stops.map((stop, index) => (
+              <div
+                key={stop.id}
+                className={`p-4 rounded-lg border ${
+                  index === currentStopIndex
+                    ? 'border-blue-500 bg-blue-50'
+                    : stop.status === 'completed'
+                    ? 'border-green-500 bg-green-50'
+                    : stop.status === 'skipped'
+                    ? 'border-red-500 bg-red-50'
+                    : 'border-gray-200'
+                }`}
+              >
+                <div className="flex justify-between items-start">
+                  <div>
+                    <h3 className="font-semibold">{getStopTitle(stop.stop_type)}</h3>
+                    <p className="text-sm text-gray-600">
+                      Arrival: {new Date(stop.arrival_time).toLocaleString()}
+                    </p>
+                    {stop.distance_from_last_stop > 0 && (
+                      <p className="text-sm text-gray-600">
+                        Distance: {stop.distance_from_last_stop.toFixed(1)} miles
+                      </p>
+                    )}
+                  </div>
+                  
+                  <span className={`px-2 py-1 rounded text-sm ${
+                    stop.status === 'completed'
+                      ? 'bg-green-100 text-green-800'
+                      : stop.status === 'skipped'
+                      ? 'bg-red-100 text-red-800'
+                      : 'bg-gray-100 text-gray-800'
+                  }`}>
+                    {stop.status.toUpperCase()}
+                  </span>
+                </div>
+                  {currentStopIndex === index && <StopStatusUpdate
+                    stop={stop}
+                    isWithinRange={isWithinRange}
+                    onConfirm={handleStopConfirmation}
+                    onSkip={handleSkipStop}
+                    timeRemaining={timeRemaining}
+                    isUpdating={isUpdating}
+                  />}
+              </div>
+            ))}
           </div>
         </div>
-      )}
 
-      {/* Duty Status */}
-      <div className="bg-white rounded-lg shadow-sm p-6">
-        <h3 className="text-lg font-semibold mb-4">Duty Status</h3>
-        <div className="grid grid-cols-2 gap-4">
-          <button className="flex items-center justify-center p-4 bg-blue-600 text-white rounded-lg">
-            <FaTruck className="mr-2" />
-            Driving
-          </button>
-          <button className="flex items-center justify-center p-4 bg-gray-100 text-gray-700 rounded-lg">
-            <BiTimeFive className="mr-2" />
-            On Duty
-          </button>
-          <button className="flex items-center justify-center p-4 bg-gray-100 text-gray-700 rounded-lg">
-            <FaBed className="mr-2" />
-            Sleeper Berth
-          </button>
-          <button className="flex items-center justify-center p-4 bg-gray-100 text-gray-700 rounded-lg">
-            <BiTimeFive className="mr-2" />
-            Off Duty
-          </button>
+        
+        {/* Duty Status Section */}
+        <div className="bg-white rounded-lg shadow-lg p-4">
+          <DutyStatusControl
+            currentStatus={currentStatus}
+            onStatusChange={handleStatusChange}
+            drivingHours={drivingHours}
+            maxDrivingHours={11}
+            onDutyHours={onDutyHours}
+            maxOnDutyHours={14}
+          />
         </div>
-      </div>
 
-      {/* Stops */}
-      <div className="bg-white rounded-lg shadow-sm p-6">
-        <h3 className="text-lg font-semibold mb-4">Stops</h3>
-        <div className="space-y-4">
-          {trip.stops.map((stop, index) => (
-            <div key={index} className="flex items-center justify-between p-4 bg-gray-50 rounded-lg">
-              <div className="flex items-center">
-                {stop.type === 'fuel' && <FaGasPump className="text-yellow-600 mr-3" />}
-                {stop.type === 'pickup' && <MdLocationOn className="text-blue-600 mr-3" />}
-                {stop.type === 'dropoff' && <MdLocationOn className="text-red-600 mr-3" />}
-                {stop.type === 'rest' && <FaBed className="text-purple-600 mr-3" />}
-                <div>
-                  <p className="font-medium">
-                    {stop.type ? stop.type.charAt(0).toUpperCase() + stop.type.slice(1) : ''} - {stop.name || ''}
-                  </p>
-                  <p className="text-sm text-gray-500">
-                    {format(new Date(stop.arrival_time), 'h:mm a')}
-                  </p>
-                </div>
+        {/* Status Logs Section */}
+        <div className="bg-white rounded-lg shadow-lg p-4">
+          <h2 className="text-xl font-bold mb-4">Status Logs</h2>
+          <div className="space-y-2">
+            {statusLogs.map((log, index) => (
+              <div key={index} className="flex justify-between text-sm">
+                <span className="text-gray-600">{log.status}</span>
+                <span className="text-gray-900">
+                  {format(log.timestamp, 'h:mm a')}
+                </span>
               </div>
-              <span className={`px-3 py-1 rounded-full text-sm ${
-                stop.status === 'complete' ? 'bg-green-100 text-green-800' :
-                stop.status === 'current' ? 'bg-blue-100 text-blue-800' :
-                'bg-gray-100 text-gray-800'
-              }`}>
-                {stop.status ? stop.status.charAt(0).toUpperCase() + stop.status.slice(1) : ''}
-              </span>
-            </div>
-          ))}
+            ))}
+          </div>
         </div>
-      </div>
-
-      {/* ELD Logs */}
-      <div className="bg-white rounded-lg shadow-sm p-6">
-        <EldLogs
-          drivingTime={{ current: 7.75, max: 11 }}
-          onDutyTime={{ current: 9.5, max: 14 }}
-        />
       </div>
     </div>
   );
+};
+
+const getStopTitle = (stopType: Stop['stop_type']) => {
+  switch (stopType) {
+    case 'pickup':
+      return 'Pickup Location';
+    case 'dropoff':
+      return 'Dropoff Location';
+    case 'rest':
+      return 'Rest Stop';
+    case 'fuel':
+      return 'Fuel Stop';
+    default:
+      return 'Stop';
+  }
 };
 
 export default TripExecution; 

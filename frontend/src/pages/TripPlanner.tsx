@@ -52,10 +52,11 @@ const LocationMarker = React.forwardRef<L.Marker, {
   position: L.LatLngTuple; 
   icon: L.Icon;
   onRemove?: () => void;
-}>(({ position, icon, onRemove }, ref) => {
+  children?: React.ReactNode;
+}>(({ position, icon, onRemove, children }, ref) => {
   return (
     <Marker position={position} icon={icon} ref={ref}>
-      {onRemove && (
+      {children || (onRemove && (
         <Popup>
           <button
             onClick={onRemove}
@@ -64,7 +65,7 @@ const LocationMarker = React.forwardRef<L.Marker, {
             Remove Location
           </button>
         </Popup>
-      )}
+      ))}
     </Marker>
   );
 });
@@ -133,6 +134,7 @@ interface TimelineEntry {
   type: 'start' | 'pickup' | 'dropoff' | 'fuel' | 'rest' | 'waypoint' | 'location';
   location: string;
   time: string;
+  index: number;
 }
 
 interface RouteData {
@@ -164,12 +166,10 @@ interface GeoJSONGeometry {
 const RoutePolyline = ({ geometry }: { geometry: GeoJSONLineString }) => {
   if (!geometry || !geometry.coordinates || !geometry.coordinates.length) return null;
 
-  console.log('RoutePolyline - Received geometry:', geometry);
-
+  
   // Convert coordinates from [lng, lat] to [lat, lng] for Leaflet
   const positions = geometry.coordinates.map(coord => [coord[1], coord[0]] as L.LatLngTuple);
-  console.log('RoutePolyline - Converted coordinates:', positions);
-
+  
   return (
     <Polyline
       positions={positions}
@@ -180,83 +180,6 @@ const RoutePolyline = ({ geometry }: { geometry: GeoJSONLineString }) => {
   );
 };
 
-interface ConfirmationModalProps {
-  isOpen: boolean;
-  distance: string;
-  onClose: () => void;
-  onConfirm: () => void;
-  onAddFuelStop: () => void;
-  isFuelStopRequired: boolean;
-  hasFuelStop: boolean;
-}
-
-const ConfirmationModal = ({
-  isOpen,
-  distance,
-  onClose,
-  onConfirm,
-  onAddFuelStop,
-  isFuelStopRequired,
-  hasFuelStop
-}: ConfirmationModalProps) => {
-  if (!isOpen) return null;
-
-  return (
-    <div className="bg-white rounded-lg p-6 max-w-md w-full mx-4">
-      <h2 className="text-xl font-semibold mb-4">Confirm Trip Plan</h2>
-      <p className="mb-4">Total distance: {distance}</p>
-
-      {isFuelStopRequired && !hasFuelStop && (
-        <div className="bg-yellow-50 border border-yellow-200 rounded-md p-4 mb-4">
-          <div className="flex items-center">
-            <FaGasPump className="text-yellow-600 mr-2" />
-            <p className="text-yellow-700">
-              A fuel stop is required for trips over 1,000 miles.
-            </p>
-          </div>
-        </div>
-      )}
-
-      {!hasFuelStop && !isFuelStopRequired && (
-        <div className="mb-4">
-          <p className="text-gray-600 mb-2">Would you like to add a fuel stop?</p>
-          <button
-            onClick={onAddFuelStop}
-            className="flex items-center justify-center px-4 py-2 border border-yellow-500 text-yellow-600 rounded-md hover:bg-yellow-50 w-full"
-          >
-            <MdLocalGasStation className="mr-2" />
-            Add Fuel Stop
-          </button>
-        </div>
-      )}
-
-      <div className="flex space-x-4">
-        <button
-          onClick={onClose}
-          className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-md hover:bg-gray-50"
-        >
-          <div className="flex items-center justify-center">
-            <FaTimes className="mr-2" />
-            Cancel
-          </div>
-        </button>
-        <button
-          onClick={onConfirm}
-          disabled={isFuelStopRequired && !hasFuelStop}
-          className={`flex-1 px-4 py-2 rounded-md ${isFuelStopRequired && !hasFuelStop
-              ? 'bg-gray-300 cursor-not-allowed'
-              : 'bg-blue-600 hover:bg-blue-700 text-white'
-            }`}
-        >
-          <div className="flex items-center justify-center">
-            <FaCheck className="mr-2" />
-            Confirm
-          </div>
-        </button>
-      </div>
-    </div>
-  );
-};
 
 interface Stop {
   id: number;
@@ -292,14 +215,6 @@ interface Trip {
   rest_stops: number;
 }
 
-// Update the planRoute action type
-interface PlanRouteParams {
-  tripId: number;
-  fuelStop?: {
-    latitude: number;
-    longitude: number;
-  };
-}
 
 const TripPlanner = () => {
   const dispatch = useDispatch<AppDispatch>();
@@ -314,7 +229,7 @@ const TripPlanner = () => {
   const [locationError, setLocationError] = useState<string | null>(null);
   const [isLocationSet, setIsLocationSet] = useState(false);
   const [routeGeometry, setRouteGeometry] = useState<GeoJSONLineString | null>(null);
-  const [isConfirmationOpen, setIsConfirmationOpen] = useState(false);
+  const [isSuccessOpen, setIsSuccessOpen] = useState(false);
   const [hasFuelStop, setHasFuelStop] = useState(false);
   const [isFuelStopRequired, setIsFuelStopRequired] = useState(false);
   const [tripData, setTripData] = useState<Trip | null>(null);
@@ -419,81 +334,6 @@ const TripPlanner = () => {
     setHasFuelStop(false);
   };
 
-  const handleConfirmTrip = async () => {
-    if (!tripData?.id) return;
-
-    try {
-      // Plan route
-      const response = await dispatch(planRoute(tripData.id)).unwrap();
-      
-      console.log('Route planned successfully:', response);
-      
-      if (response.route && response.route.code === 'Ok' && response.route.routes && response.route.routes[0]) {
-        const route = response.route.routes[0];
-        
-        // Update route data
-        if (route.geometry && route.geometry.type === 'LineString' && Array.isArray(route.geometry.coordinates)) {
-          setRouteGeometry(route.geometry);
-        }
-
-        // Create timeline entries
-        const timelineEntries: TimelineEntry[] = [];
-        
-        // Add current location as start
-        timelineEntries.push({
-          type: 'start',
-          location: `${formData.current_location.latitude.toFixed(4)}, ${formData.current_location.longitude.toFixed(4)}`,
-          time: new Date().toLocaleString()
-        });
-
-        // Add pickup location
-        timelineEntries.push({
-          type: 'pickup',
-          location: `${formData.pickup_location.latitude.toFixed(4)}, ${formData.pickup_location.longitude.toFixed(4)}`,
-          time: new Date(Date.now() + (route.duration * 1000) / 3).toLocaleString()
-        });
-
-        // Add fuel stop if present
-        if (formData.fuel_stop.latitude !== 0 && formData.fuel_stop.longitude !== 0) {
-          timelineEntries.push({
-            type: 'fuel',
-            location: `${formData.fuel_stop.latitude.toFixed(4)}, ${formData.fuel_stop.longitude.toFixed(4)}`,
-            time: new Date(Date.now() + (route.duration * 1000) / 2).toLocaleString()
-          });
-        }
-
-        // Add dropoff location
-        timelineEntries.push({
-          type: 'dropoff',
-          location: `${formData.dropoff_location.latitude.toFixed(4)}, ${formData.dropoff_location.longitude.toFixed(4)}`,
-          time: new Date(Date.now() + route.duration * 1000).toLocaleString()
-        });
-
-        // Update route data
-        setRouteData({
-          timeline: timelineEntries,
-          eldLogs: {
-            drivingTime: formatDuration(route.duration || 0),
-            onDuty: formatDuration((route.duration || 0) * 1.2),
-            restTime: formatDuration(tripData.required_rest_time || 0)
-          },
-          summary: {
-            totalDistance: formatDistance(route.distance || 0),
-            estimatedDuration: formatDuration(route.duration || 0),
-            fuelStops: formData.fuel_stop.latitude !== 0 ? 1 : 0,
-            restStops: tripData.rest_stops || 0
-          }
-        });
-      }
-      
-      // Close the confirmation modal
-      setIsConfirmationOpen(false);
-    } catch (err) {
-      console.error('Failed to plan route:', err);
-      setLocationError('Failed to plan route. Please try again.');
-    }
-  };
-
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
@@ -518,18 +358,102 @@ const TripPlanner = () => {
 
       // Create trip with all locations
       const tripPayload = {
-        ...formData,
-        fuel_stop: hasFuelStop ? formData.fuel_stop : undefined
+        current_location: {
+          latitude: formData.current_location.latitude,
+          longitude: formData.current_location.longitude
+        },
+        pickup_location: {
+          latitude: formData.pickup_location.latitude,
+          longitude: formData.pickup_location.longitude
+        },
+        dropoff_location: {
+          latitude: formData.dropoff_location.latitude,
+          longitude: formData.dropoff_location.longitude
+        },
+        fuel_stop: hasFuelStop ? {
+          latitude: formData.fuel_stop.latitude,
+          longitude: formData.fuel_stop.longitude
+        } : undefined,
+        current_cycle_hours: formData.current_cycle_hours
       };
 
       console.log('Creating trip with data:', tripPayload);
       const result = await dispatch(createTrip(tripPayload)).unwrap();
       console.log('Trip created:', result);
       
-      if (result.id) {
-        // Store the trip data and show confirmation modal
-        setTripData(result);
-        setIsConfirmationOpen(true);
+      if (result.trip?.id) {
+        // Store the trip data
+        setTripData(result.trip);
+        
+        // Plan route immediately
+        const response = await dispatch(planRoute(result.trip.id)).unwrap();
+        console.log('Route planned successfully:', response);
+        
+        if (response.route && response.route.code === 'Ok' && response.route.routes && response.route.routes[0]) {
+          const route = response.route.routes[0];
+          
+          // Update route data
+          if (route.geometry && route.geometry.type === 'LineString' && Array.isArray(route.geometry.coordinates)) {
+            console.log('Setting route geometry:', route.geometry);
+            setRouteGeometry(route.geometry);
+          }
+
+          // Create timeline entries
+          const timelineEntries: TimelineEntry[] = [];
+          
+          // Add current location as start
+          timelineEntries.push({
+            type: 'start',
+            location: `${formData.current_location.latitude.toFixed(4)}, ${formData.current_location.longitude.toFixed(4)}`,
+            time: new Date().toLocaleString(),
+            index: 0
+          });
+
+          // Add pickup location
+          timelineEntries.push({
+            type: 'pickup',
+            location: `${formData.pickup_location.latitude.toFixed(4)}, ${formData.pickup_location.longitude.toFixed(4)}`,
+            time: new Date(Date.now() + (route.duration * 1000) / 3).toLocaleString(),
+            index: 1
+          });
+
+          // Add fuel stop if present
+          if (formData.fuel_stop.latitude !== 0 && formData.fuel_stop.longitude !== 0) {
+            timelineEntries.push({
+              type: 'fuel',
+              location: `${formData.fuel_stop.latitude.toFixed(4)}, ${formData.fuel_stop.longitude.toFixed(4)}`,
+              time: new Date(Date.now() + (route.duration * 1000) / 2).toLocaleString(),
+              index: 2
+            });
+          }
+
+          // Add dropoff location
+          timelineEntries.push({
+            type: 'dropoff',
+            location: `${formData.dropoff_location.latitude.toFixed(4)}, ${formData.dropoff_location.longitude.toFixed(4)}`,
+            time: new Date(Date.now() + route.duration * 1000).toLocaleString(),
+            index: timelineEntries.length
+          });
+
+          // Update route data
+          setRouteData({
+            timeline: timelineEntries,
+            eldLogs: {
+              drivingTime: formatDuration(route.duration || 0),
+              onDuty: formatDuration((route.duration || 0) * 1.2),
+              restTime: formatDuration(result.trip.required_rest_time || 0)
+            },
+            summary: {
+              totalDistance: formatDistance(route.distance || 0),
+              estimatedDuration: formatDuration(route.duration || 0),
+              fuelStops: formData.fuel_stop.latitude !== 0 ? 1 : 0,
+              restStops: result.trip.rest_stops || 0
+            }
+          });
+
+          // Show success dialog
+          setIsSuccessOpen(true);
+        }
       }
     } catch (err) {
       console.error('Failed to create trip:', err);
@@ -559,11 +483,113 @@ const TripPlanner = () => {
         </div>
       )}
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+      <div className="flex md:flex-col gap-8">
+      {/* Right Column - Map */}
+        <div className="bg-white rounded-lg shadow-sm overflow-hidden">
+          <div className="h-[400px]">
+            <MapContainer
+              center={defaultCenter}
+              zoom={4}
+              className="h-full w-full"
+              style={{ zIndex: 1 }}
+              scrollWheelZoom={false}
+            >
+              <TileLayer
+                attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+                url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+              />
+              <BoundsUpdater
+                currentLocation={formData.current_location}
+                pickupLocation={formData.pickup_location}
+                dropoffLocation={formData.dropoff_location}
+              />
+              <MapClickHandler onLocationSelect={handleLocationSelect} />
+
+              {/* Update RoutePolyline rendering */}
+              {routeGeometry && <RoutePolyline geometry={routeGeometry} />}
+              
+              {/* Current Location Marker */}
+              {isLocationSet && (
+                <LocationMarker 
+                  position={[formData.current_location.latitude, formData.current_location.longitude]} 
+                  icon={defaultIcon}
+                >
+                  <Popup>
+                    <div className="p-2">
+                      <div className="font-semibold">Current Location</div>
+                      <div className="text-sm text-gray-600">Stop #1</div>
+                    </div>
+                  </Popup>
+                </LocationMarker>
+              )}
+              
+              {/* Pickup Location Marker */}
+              {formData.pickup_location.latitude !== 0 && (
+                <LocationMarker 
+                  position={[formData.pickup_location.latitude, formData.pickup_location.longitude]} 
+                  icon={greenIcon}
+                  onRemove={handleRemovePickup}
+                >
+                  <Popup>
+                    <div className="p-2">
+                      <div className="font-semibold">Pickup Location</div>
+                      <div className="text-sm text-gray-600">Stop #2</div>
+                    </div>
+                  </Popup>
+                </LocationMarker>
+              )}
+              
+              {/* Dropoff Location Marker */}
+              {formData.dropoff_location.latitude !== 0 && (
+                <LocationMarker 
+                  position={[formData.dropoff_location.latitude, formData.dropoff_location.longitude]} 
+                  icon={redIcon}
+                  onRemove={handleRemoveDropoff}
+                >
+                  <Popup>
+                    <div className="p-2">
+                      <div className="font-semibold">Dropoff Location</div>
+                      <div className="text-sm text-gray-600">Stop #{formData.fuel_stop.latitude !== 0 ? '4' : '3'}</div>
+                    </div>
+                  </Popup>
+                </LocationMarker>
+              )}
+
+              {/* Fuel Stop Marker */}
+              {hasFuelStop && formData.fuel_stop.latitude !== 0 && (
+                <LocationMarker
+                  position={[formData.fuel_stop.latitude, formData.fuel_stop.longitude]}
+                  icon={new L.Icon({
+                    iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-yellow.png',
+                    shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-shadow.png',
+                    iconSize: [25, 41],
+                    iconAnchor: [12, 41],
+                    popupAnchor: [1, -34],
+                    shadowSize: [41, 41]
+                  })}
+                  onRemove={handleRemoveFuelStop}
+                >
+                  <Popup>
+                    <div className="p-2">
+                      <div className="font-semibold">Fuel Stop</div>
+                      <div className="text-sm text-gray-600">Stop #3</div>
+                    </div>
+                  </Popup>
+                </LocationMarker>
+              )}
+            </MapContainer>
+          </div>
+          <p className="p-4 text-sm text-gray-500">
+            {isSelectingFuelStop
+              ? 'Click on the map to add a fuel stop location'
+              : 'Click on the map to set pickup (green) and dropoff (red) locations. Click on a marker to remove it.'}
+          </p>
+        </div>
+        </div>
         {/* Left Column - Form */}
-        <div className="space-y-6">
+        { !(tripData && routeData) && <div className="space-y-6">
           <form onSubmit={handleSubmit} className="bg-white rounded-lg shadow-sm p-6">
-            <div className="space-y-4 grid grid-cols-1 gap-4">
+            <div className="space-y-4 grid grid-cols-3 gap-4">
               <div className="flex flex-shrink-0 gap-4">
                 <div className="w-auto h-full  rounded-full flex items-center justify-center">
                   <div className="w-8 h-8 bg-green-100 rounded-full flex items-center justify-center">
@@ -711,8 +737,8 @@ const TripPlanner = () => {
                 )}
               </div>
               {/* Current Cycle Hours Input */}
-              <div>
-                <label htmlFor="current_cycle_hours" className="block text-sm font-medium text-gray-700">
+              <div className='flex gap-4'>
+                <label htmlFor="current_cycle_hours" className="block text-sm font-medium text-gray-700 py-3">
                   Current Cycle Hours
                 </label>
                 <input
@@ -721,16 +747,17 @@ const TripPlanner = () => {
                   max="70"
                   step="0.1"
                   id="current_cycle_hours"
-                  className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 text-gray-900 focus:border-blue-500 focus:outline-none focus:ring-blue-500 sm:text-sm"
+                  className="mt-1 block rounded-md border border-gray-300 px-3 py-2 text-gray-900 focus:border-blue-500 focus:outline-none focus:ring-blue-500 sm:text-sm"
                   value={formData.current_cycle_hours || ''}
                   onChange={(e) => setFormData({
                     ...formData,
                     current_cycle_hours: parseFloat(e.target.value)
                   })}
-                  placeholder="Enter hours worked in cycle"
+                  placeholder="Hours "
                 />
               </div>
               {/* Generate Route Button */}
+              <div className="py-2">
               <button
                 type="submit"
                 disabled={loading}
@@ -738,131 +765,13 @@ const TripPlanner = () => {
               >
                 {loading ? 'Planning...' : 'Generate Route Plan'}
               </button>
-              <Dialog open={isConfirmationOpen} onOpenChange={setIsConfirmationOpen}>
-                <DialogContent className="sm:max-w-[425px]">
-                  <DialogHeader>
-                    <DialogTitle>Confirm Trip Details</DialogTitle>
-                    <DialogDescription>
-                      Please review the trip details before generating the route plan.
-                    </DialogDescription>
-                  </DialogHeader>
-                  <div className="grid gap-4 py-4">
-                    <div className="space-y-2">
-                      <h3 className="text-lg font-semibold">Route Summary</h3>
-                      <div className="space-y-1">
-                        <p>Total Distance: {formatDistance(Number(routeData.summary.totalDistance))}</p>
-                        <p>Estimated Duration: {routeData.summary.estimatedDuration}</p>
-                        <p>Fuel Stops: {routeData.summary.fuelStops}</p>
-                        <p>Rest Stops: {routeData.summary.restStops}</p>
-                      </div>
-                    </div>
-                    <div className="space-y-2">
-                      <h3 className="text-lg font-semibold">ELD Logs</h3>
-                      <div className="space-y-1">
-                        <p>Driving Time: {routeData.eldLogs.drivingTime}</p>
-                        <p>On Duty Time: {routeData.eldLogs.onDuty}</p>
-                        <p>Rest Time: {routeData.eldLogs.restTime}</p>
-                      </div>
-                    </div>
-                    <div className="space-y-2">
-                      <h3 className="text-lg font-semibold">Timeline</h3>
-                      <div className="space-y-1">
-                        {routeData.timeline.map((entry, index) => (
-                          <div key={index} className="flex items-center gap-2">
-                            <span className="font-medium">{entry.type}:</span>
-                            <span>{entry.location}</span>
-                            <span className="text-gray-500">({entry.time})</span>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  </div>
-                  <DialogFooter>
-                    <DialogTrigger asChild>
-                      <Button variant="outline">Cancel</Button>
-                    </DialogTrigger>
-                    <Button onClick={handleConfirmTrip}>Confirm</Button>
-                  </DialogFooter>
-                </DialogContent>
-              </Dialog>
+              </div>
             </div>
           </form>
         </div>
+}
 
-        {/* Right Column - Map */}
-        <div className="bg-white rounded-lg shadow-sm overflow-hidden">
-          <div className="h-[400px]">
-            <MapContainer
-              center={defaultCenter}
-              zoom={4}
-              className="h-full w-full"
-              style={{ zIndex: 1 }}
-              scrollWheelZoom={false}
-            >
-              <TileLayer
-                attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
-                url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-              />
-              <BoundsUpdater
-                currentLocation={formData.current_location}
-                pickupLocation={formData.pickup_location}
-                dropoffLocation={formData.dropoff_location}
-              />
-              <MapClickHandler onLocationSelect={handleLocationSelect} />
-
-              {/* Update RoutePolyline rendering */}
-              {routeGeometry && <RoutePolyline geometry={routeGeometry} />}
-              
-              {/* Current Location Marker */}
-              {isLocationSet && (
-                <LocationMarker 
-                  position={[formData.current_location.latitude, formData.current_location.longitude]} 
-                  icon={defaultIcon}
-                />
-              )}
-              
-              {/* Pickup Location Marker */}
-              {formData.pickup_location.latitude !== 0 && (
-                <LocationMarker 
-                  position={[formData.pickup_location.latitude, formData.pickup_location.longitude]} 
-                  icon={greenIcon}
-                  onRemove={handleRemovePickup}
-                />
-              )}
-              
-              {/* Dropoff Location Marker */}
-              {formData.dropoff_location.latitude !== 0 && (
-                <LocationMarker 
-                  position={[formData.dropoff_location.latitude, formData.dropoff_location.longitude]} 
-                  icon={redIcon}
-                  onRemove={handleRemoveDropoff}
-                />
-              )}
-
-              {/* Fuel Stop Marker */}
-              {hasFuelStop && formData.fuel_stop.latitude !== 0 && (
-                <LocationMarker
-                  position={[formData.fuel_stop.latitude, formData.fuel_stop.longitude]}
-                  icon={new L.Icon({
-                    iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-yellow.png',
-                    shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-shadow.png',
-                    iconSize: [25, 41],
-                    iconAnchor: [12, 41],
-                    popupAnchor: [1, -34],
-                    shadowSize: [41, 41]
-                  })}
-                  onRemove={handleRemoveFuelStop}
-                />
-              )}
-            </MapContainer>
-          </div>
-          <p className="p-4 text-sm text-gray-500">
-            {isSelectingFuelStop
-              ? 'Click on the map to add a fuel stop location'
-              : 'Click on the map to set pickup (green) and dropoff (red) locations. Click on a marker to remove it.'}
-          </p>
-        </div>
-      </div>
+        
 
       {/* Bottom Sections */}
       {tripData && routeData && <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mt-8">
@@ -873,38 +782,12 @@ const TripPlanner = () => {
             {routeData.timeline.map((stop: any, index: number) => (
               <div key={index} className="flex items-start space-x-3">
                 <div className="flex-shrink-0">
-                  {stop.type === 'start' && (
-                    <div className="w-8 h-8 bg-green-100 rounded-full flex items-center justify-center">
-                      <MdLocationOn className="w-5 h-5 text-green-600" />
-                    </div>
-                  )}
-                  {stop.type === 'pickup' && (
-                    <div className="w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center">
-                      <MdLocationOn className="w-5 h-5 text-blue-600" />
-                    </div>
-                  )}
-                  {stop.type === 'dropoff' && (
-                    <div className="w-8 h-8 bg-red-100 rounded-full flex items-center justify-center">
-                      <MdLocationOn className="w-5 h-5 text-red-600" />
-                    </div>
-                  )}
-                  {stop.type === 'fuel' && (
-                    <div className="w-8 h-8 bg-yellow-100 rounded-full flex items-center justify-center">
-                      <FaGasPump className="w-4 h-4 text-yellow-600" />
-                    </div>
-                  )}
-                  {stop.type === 'rest' && (
-                    <div className="w-8 h-8 bg-purple-100 rounded-full flex items-center justify-center">
-                      <FaBed className="w-4 h-4 text-purple-600" />
-                    </div>
-                  )}
-                  {(stop.type === 'waypoint' || stop.type === 'location') && (
-                    <div className="w-8 h-8 bg-gray-100 rounded-full flex items-center justify-center">
-                      <MdLocationOn className="w-5 h-5 text-gray-600" />
-                    </div>
-                  )}
+                  {/* Stop Index Badge */}
+                  <div className="w-8 h-8 rounded-full bg-gray-100 flex items-center justify-center text-sm font-medium text-gray-600">
+                    {stop.index + 1}
+                  </div>
                 </div>
-        <div>
+                <div>
                   <p className="font-medium text-gray-900">{stop.location}</p>
                   <p className="text-sm text-gray-500">{stop.time}</p>
                 </div>
@@ -982,6 +865,43 @@ const TripPlanner = () => {
           </div>
         </div>
       </div>}
+
+      {/* Success Dialog */}
+      <Dialog open={isSuccessOpen} onOpenChange={setIsSuccessOpen}>
+        <DialogContent className="sm:max-w-[425px]">
+          <DialogHeader>
+            <DialogTitle>Success!</DialogTitle>
+            <DialogDescription>
+              Your trip has been created and the route has been planned successfully.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-4 py-4">
+            <div className="flex items-center space-x-2 text-green-600">
+              <svg
+                className="h-6 w-6"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+                xmlns="http://www.w3.org/2000/svg"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M5 13l4 4L19 7"
+                />
+              </svg>
+              <span className="font-medium">Trip Created Successfully</span>
+            </div>
+            <div className="text-sm text-gray-600">
+              <p>You can now view and manage your trip in the trips list.</p>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button onClick={() => setIsSuccessOpen(false)}>Close</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };

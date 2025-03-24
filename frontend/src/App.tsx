@@ -28,6 +28,7 @@ const AppContent: React.FC = () => {
         <Routes>
           <Route path="/" element={<LandingPage />} />
           <Route path="/dashboard" element={<TripList />} />
+          <Route path="/trips" element={<TripList />} />
           <Route path="/trip/new" element={<TripPlanner />} />              
           <Route path="/route-display" element={<RouteAndELDLogDisplay />} />
           <Route path="/live-trip" element={<LiveTripExecution />} />

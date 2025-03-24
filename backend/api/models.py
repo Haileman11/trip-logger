@@ -8,6 +8,7 @@ class Trip(models.Model):
     dropoff_location = models.JSONField()
     current_cycle_hours = models.FloatField()
     status = models.CharField(max_length=20, default='pending')
+    route = models.JSONField(null=True, blank=True)  # Store OSRM route data
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 

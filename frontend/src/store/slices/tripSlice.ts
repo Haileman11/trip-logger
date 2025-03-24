@@ -1,42 +1,6 @@
 import { createSlice, createAsyncThunk } from '@reduxjs/toolkit';
 import { RootState } from '../../store';
-
-interface Location {
-  latitude: number;
-  longitude: number;
-}
-
-export interface Stop {
-  id: number;
-  type: 'pickup' | 'dropoff' | 'fuel' | 'rest';
-  name?: string;
-  location: Location;
-  sequence: number;
-  arrival_time: string;
-  departure_time?: string;
-  status: 'pending' | 'current' | 'complete';
-  distance_from_last_stop: number;
-  cycle_hours_at_stop: number;
-}
-
-export interface Trip {
-  id: number;
-  status: string;
-  current_location: Location;
-  pickup_location: Location;
-  dropoff_location: Location;
-  fuel_stop?: Location;
-  current_cycle_hours: number;
-  stops: Stop[];
-  route?: {
-    geometry: {
-      type: 'LineString';
-      coordinates: [number, number][];
-    };
-  };
-  required_rest_time: number;
-  rest_stops: number;
-}
+import { Trip, Location, Stop } from '../../types';
 
 interface TripState {
   trips: Trip[];
@@ -108,13 +72,15 @@ export const fetchTrips = createAsyncThunk(
 );
 
 export const fetchTrip = createAsyncThunk(
-  'trips/fetchTrip',
+  'trip/fetchTrip',
   async (tripId: string) => {
-    const response = await fetch(`/api/trips/${tripId}/`);
+    const response = await fetch(`/api/trips/${tripId}`);
     if (!response.ok) {
       throw new Error('Failed to fetch trip');
     }
-    return response.json();
+    const data = await response.json();
+    console.log('Fetch Trip API Response data:', data);
+    return data as Trip;
   }
 );
 
@@ -132,22 +98,34 @@ export const createTrip = createAsyncThunk(
       headers: {
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify(tripData),
+      body: JSON.stringify({
+        ...tripData,
+        current_location: {
+          latitude: tripData.current_location.latitude,
+          longitude: tripData.current_location.longitude
+        },
+        pickup_location: {
+          latitude: tripData.pickup_location.latitude,
+          longitude: tripData.pickup_location.longitude
+        },
+        dropoff_location: {
+          latitude: tripData.dropoff_location.latitude,
+          longitude: tripData.dropoff_location.longitude
+        },
+        fuel_stop: tripData.fuel_stop ? {
+          latitude: tripData.fuel_stop.latitude,
+          longitude: tripData.fuel_stop.longitude
+        } : undefined
+      }),
     });
     if (!response.ok) {
-      throw new Error('Failed to create trip');
+      const errorData = await response.json().catch(() => ({}));
+      console.error('Create Trip API Error:', errorData);
+      throw new Error(errorData.message || 'Failed to create trip');
     }
     return response.json();
   }
 );
-
-interface PlanRouteParams {
-  tripId: number;
-  fuelStop?: {
-    latitude: number;
-    longitude: number;
-  };
-}
 
 export const planRoute = createAsyncThunk(
   'trips/planRoute',
@@ -169,14 +147,49 @@ export const planRoute = createAsyncThunk(
     });
     if (!response.ok) {
       const errorData = await response.json().catch(() => ({}));
+      console.error("Plan Route API Error data:", errorData);
       throw new Error(errorData.message || 'Failed to plan route');
     }
-    return response.json();
+    const data = await response.json();
+    console.log('Plan Route API Response data:', data);
+    return data;
+  }
+);
+
+export const updateStopStatus = createAsyncThunk(
+  'trip/updateStopStatus',
+  async ({ tripId, stopId, status }: { tripId: string; stopId: string; status: string }) => {
+    const response = await fetch(`/api/trips/${tripId}/stops/${stopId}/`, {
+      method: 'PATCH',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ status }),
+    });
+    if (!response.ok) {
+      throw new Error('Failed to update stop status');
+    }
+    const data = await response.json();
+    return data as Trip;
+  }
+);
+
+export const completeTrip = createAsyncThunk(
+  'trip/completeTrip',
+  async (tripId: string) => {
+    const response = await fetch(`/api/trips/${tripId}/complete/`, {
+      method: 'POST',
+    });
+    if (!response.ok) {
+      throw new Error('Failed to complete trip');
+    }
+    const data = await response.json();
+    return data as Trip;
   }
 );
 
 const tripSlice = createSlice({
-  name: 'trips',
+  name: 'trip',
   initialState,
   reducers: {
     setCurrentTrip: (state, action) => {
@@ -227,13 +240,24 @@ const tripSlice = createSlice({
           state.currentTrip = {
             ...state.currentTrip,
             stops: action.payload.stops,
-            status: 'planned'
+            route: action.payload.route,
+            status: action.payload.trip.status
           };
         }
       })
       .addCase(planRoute.rejected, (state, action) => {
         state.loading = false;
         state.error = action.error.message || 'Failed to plan route';
+      })
+      .addCase(updateStopStatus.fulfilled, (state, action) => {
+        if (state.currentTrip) {
+          state.currentTrip = action.payload;
+        }
+      })
+      .addCase(completeTrip.fulfilled, (state, action) => {
+        if (state.currentTrip) {
+          state.currentTrip = action.payload;
+        }
       });
   },
 });
