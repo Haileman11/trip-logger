@@ -55,6 +55,12 @@ export interface Route {
 
 export interface Trip {
   id: string;
+  created_by?: {
+    id: string;
+    email: string;
+    first_name: string;
+    last_name: string;
+  };
   current_location: Location;
   pickup_location: Location;
   dropoff_location: Location;
@@ -66,4 +72,34 @@ export interface Trip {
   log_sheets: LogSheet[];
   created_at: string;
   updated_at: string;
+} 
+
+export interface User {
+  id: string;
+  email: string;
+  first_name: string;
+  last_name: string;
+}
+
+
+export interface LoginData {
+  email: string;
+  password: string;
+}
+
+export interface RegisterData extends LoginData {
+  first_name: string;
+  last_name: string;
+  password_confirmation: string;
+}
+
+export interface AuthResponse {
+  user: User;
+  token: string;
+  refresh_token: string;
+}
+
+export interface AuthError {
+  message: string;
+  errors?: Record<string, string[]>;
 } 

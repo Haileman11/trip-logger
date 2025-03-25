@@ -1,8 +1,43 @@
 from django.db import models
+from django.contrib.auth.models import AbstractUser
+from django.utils.translation import gettext_lazy as _
 
 # Create your models here.
 
+class User(AbstractUser):
+    email = models.EmailField(_('email address'), unique=True)
+    first_name = models.CharField(_('first name'), max_length=30)
+    last_name = models.CharField(_('last name'), max_length=30)
+    
+    # Fix reverse accessor conflicts
+    groups = models.ManyToManyField(
+        'auth.Group',
+        verbose_name=_('groups'),
+        blank=True,
+        help_text=_(
+            'The groups this user belongs to. A user will get all permissions '
+            'granted to each of their groups.'
+        ),
+        related_name='custom_user_set',
+        related_query_name='custom_user',
+    )
+    user_permissions = models.ManyToManyField(
+        'auth.Permission',
+        verbose_name=_('user permissions'),
+        blank=True,
+        help_text=_('Specific permissions for this user.'),
+        related_name='custom_user_set',
+        related_query_name='custom_user',
+    )
+    
+    USERNAME_FIELD = 'email'
+    REQUIRED_FIELDS = ['username', 'first_name', 'last_name']
+
+    def __str__(self):
+        return self.email
+
 class Trip(models.Model):
+    created_by = models.ForeignKey(User, on_delete=models.CASCADE, related_name='trips', null=True)
     current_location = models.JSONField()
     pickup_location = models.JSONField()
     dropoff_location = models.JSONField()

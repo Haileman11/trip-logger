@@ -17,6 +17,10 @@ import { DialogTrigger } from '@/components/ui/dialog';
 import React from 'react';
 import { DialogFooter } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
+import { useNavigate } from 'react-router-dom';
+import { useAppDispatch } from '@/hooks/useAppDispatch';
+import { useAppSelector } from '@/hooks/useAppSelector';
+import type { Location } from '@/types';
 
 // Fix for default marker icons in React-Leaflet
 const defaultIcon = new L.Icon({
@@ -217,24 +221,27 @@ interface Trip {
 
 
 const TripPlanner = () => {
-  const dispatch = useDispatch<AppDispatch>();
-  const { loading, error } = useSelector((state: RootState) => state.trips);
-  const [formData, setFormData] = useState({
-    current_location: { latitude: 0, longitude: 0 },
-    pickup_location: { latitude: 0, longitude: 0 },
-    dropoff_location: { latitude: 0, longitude: 0 },
-    fuel_stop: { latitude: 0, longitude: 0 },
-    current_cycle_hours: 0,
+  const dispatch = useAppDispatch();
+  const navigate = useNavigate();
+  
+  // Form state
+  const [formState, setFormState] = useState({
+    currentLocation: { latitude: 0, longitude: 0 },
+    pickupLocation: { latitude: 0, longitude: 0 },
+    dropoffLocation: { latitude: 0, longitude: 0 },
+    fuelStop: undefined as Location | undefined,
+    currentCycleHours: 0,
   });
-  const [locationError, setLocationError] = useState<string | null>(null);
-  const [isLocationSet, setIsLocationSet] = useState(false);
-  const [routeGeometry, setRouteGeometry] = useState<GeoJSONLineString | null>(null);
+
+  // UI state
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+  const [routeGeometry, setRouteGeometry] = useState<any>(null);
   const [isSuccessOpen, setIsSuccessOpen] = useState(false);
   const [hasFuelStop, setHasFuelStop] = useState(false);
   const [isFuelStopRequired, setIsFuelStopRequired] = useState(false);
   const [tripData, setTripData] = useState<Trip | null>(null);
   const [isSelectingFuelStop, setIsSelectingFuelStop] = useState(false);
-
   const [routeData, setRouteData] = useState<RouteData>({
     timeline: [],
     eldLogs: {
@@ -265,60 +272,59 @@ const TripPlanner = () => {
     if ('geolocation' in navigator) {
       navigator.geolocation.getCurrentPosition(
         (position) => {
-          setFormData(prev => ({
+          setFormState(prev => ({
             ...prev,
-            current_location: {
+            currentLocation: {
               latitude: position.coords.latitude,
               longitude: position.coords.longitude,
             },
           }));
-          setIsLocationSet(true);
         },
         (error) => {
-          setLocationError('Unable to get your location. Please enable location services.');
+          setError('Unable to get your location. Please enable location services.');
           console.error('Geolocation error:', error);
         }
       );
     } else {
-      setLocationError('Geolocation is not supported by your browser.');
+      setError('Geolocation is not supported by your browser.');
     }
   }, []);
 
   const handleLocationSelect = (location: { latitude: number; longitude: number }) => {
     if (isSelectingFuelStop) {
-      setFormData(prev => ({
+      setFormState(prev => ({
         ...prev,
-        fuel_stop: location
+        fuelStop: location
       }));
       setHasFuelStop(true);
       setIsSelectingFuelStop(false);
       return;
     }
 
-    if (formData.pickup_location.latitude === 0) {
-      setFormData(prev => ({
+    if (formState.pickupLocation.latitude === 0) {
+      setFormState(prev => ({
         ...prev,
-        pickup_location: location
+        pickupLocation: location
       }));
-    } else if (formData.dropoff_location.latitude === 0) {
-      setFormData(prev => ({
+    } else if (formState.dropoffLocation.latitude === 0) {
+      setFormState(prev => ({
         ...prev,
-        dropoff_location: location
+        dropoffLocation: location
       }));
     }
   };
 
   const handleRemovePickup = () => {
-    setFormData(prev => ({
+    setFormState(prev => ({
       ...prev,
-      pickup_location: { latitude: 0, longitude: 0 }
+      pickupLocation: { latitude: 0, longitude: 0 }
     }));
   };
 
   const handleRemoveDropoff = () => {
-    setFormData(prev => ({
+    setFormState(prev => ({
       ...prev,
-      dropoff_location: { latitude: 0, longitude: 0 }
+      dropoffLocation: { latitude: 0, longitude: 0 }
     }));
   };
 
@@ -327,147 +333,60 @@ const TripPlanner = () => {
   };
 
   const handleRemoveFuelStop = () => {
-    setFormData(prev => ({
+    setFormState(prev => ({
       ...prev,
-      fuel_stop: { latitude: 0, longitude: 0 }
+      fuelStop: undefined
     }));
     setHasFuelStop(false);
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    setError('');
+    setLoading(true);
+
     try {
-      // Validate coordinates
-      const validateLocation = (loc: { latitude: number; longitude: number }) => {
-        return !isNaN(loc.latitude) && !isNaN(loc.longitude) &&
-               loc.latitude >= -90 && loc.latitude <= 90 &&
-               loc.longitude >= -180 && loc.longitude <= 180;
-      };
-
-      if (!validateLocation(formData.current_location) ||
-          !validateLocation(formData.pickup_location) ||
-          !validateLocation(formData.dropoff_location)) {
-        setLocationError('Please enter valid coordinates for all locations');
-        return;
-      }
-
-      if (formData.pickup_location.latitude === 0 || formData.dropoff_location.latitude === 0) {
-        setLocationError('Please set both pickup and dropoff locations on the map');
-        return;
-      }
-
-      // Create trip with all locations
       const tripPayload = {
-        current_location: {
-          latitude: formData.current_location.latitude,
-          longitude: formData.current_location.longitude
-        },
-        pickup_location: {
-          latitude: formData.pickup_location.latitude,
-          longitude: formData.pickup_location.longitude
-        },
-        dropoff_location: {
-          latitude: formData.dropoff_location.latitude,
-          longitude: formData.dropoff_location.longitude
-        },
-        fuel_stop: hasFuelStop ? {
-          latitude: formData.fuel_stop.latitude,
-          longitude: formData.fuel_stop.longitude
-        } : undefined,
-        current_cycle_hours: formData.current_cycle_hours
+        current_location: formState.currentLocation,
+        pickup_location: formState.pickupLocation,
+        dropoff_location: formState.dropoffLocation,
+        fuel_stop: formState.fuelStop,
+        current_cycle_hours: formState.currentCycleHours
       };
 
       console.log('Creating trip with data:', tripPayload);
-      const result = await dispatch(createTrip(tripPayload)).unwrap();
-      console.log('Trip created:', result);
+      const response = await dispatch(createTrip(tripPayload)).unwrap();
+      console.log('Trip creation response:', response);
+
+      // The response already includes trip, route, and stops
+      if (!response.trip || !response.route) {
+        throw new Error('Invalid response format from server');
+      }
+
+      setRouteGeometry(response.route.geometry);
       
-      if (result.trip?.id) {
-        // Store the trip data
-        setTripData(result.trip);
-        
-        // Plan route immediately
-        const response = await dispatch(planRoute(result.trip.id)).unwrap();
-        console.log('Route planned successfully:', response);
-        
-        if (response.route && response.route.code === 'Ok' && response.route.routes && response.route.routes[0]) {
-          const route = response.route.routes[0];
-          
-          // Update route data
-          if (route.geometry && route.geometry.type === 'LineString' && Array.isArray(route.geometry.coordinates)) {
-            console.log('Setting route geometry:', route.geometry);
-            setRouteGeometry(route.geometry);
-          }
-
-          // Create timeline entries
-          const timelineEntries: TimelineEntry[] = [];
-          
-          // Add current location as start
-          timelineEntries.push({
-            type: 'start',
-            location: `${formData.current_location.latitude.toFixed(4)}, ${formData.current_location.longitude.toFixed(4)}`,
-            time: new Date().toLocaleString(),
-            index: 0
-          });
-
-          // Add pickup location
-          timelineEntries.push({
-            type: 'pickup',
-            location: `${formData.pickup_location.latitude.toFixed(4)}, ${formData.pickup_location.longitude.toFixed(4)}`,
-            time: new Date(Date.now() + (route.duration * 1000) / 3).toLocaleString(),
-            index: 1
-          });
-
-          // Add fuel stop if present
-          if (formData.fuel_stop.latitude !== 0 && formData.fuel_stop.longitude !== 0) {
-            timelineEntries.push({
-              type: 'fuel',
-              location: `${formData.fuel_stop.latitude.toFixed(4)}, ${formData.fuel_stop.longitude.toFixed(4)}`,
-              time: new Date(Date.now() + (route.duration * 1000) / 2).toLocaleString(),
-              index: 2
-            });
-          }
-
-          // Add dropoff location
-          timelineEntries.push({
-            type: 'dropoff',
-            location: `${formData.dropoff_location.latitude.toFixed(4)}, ${formData.dropoff_location.longitude.toFixed(4)}`,
-            time: new Date(Date.now() + route.duration * 1000).toLocaleString(),
-            index: timelineEntries.length
-          });
-
-          // Update route data
-          setRouteData({
-            timeline: timelineEntries,
-            eldLogs: {
-              drivingTime: formatDuration(route.duration || 0),
-              onDuty: formatDuration((route.duration || 0) * 1.2),
-              restTime: formatDuration(result.trip.required_rest_time || 0)
-            },
-            summary: {
-              totalDistance: formatDistance(route.distance || 0),
-              estimatedDuration: formatDuration(route.duration || 0),
-              fuelStops: formData.fuel_stop.latitude !== 0 ? 1 : 0,
-              restStops: result.trip.rest_stops || 0
-            }
-          });
-
-          // Show success dialog
-          setIsSuccessOpen(true);
-        }
-      }
+      // Navigate to trips list on success
+      navigate('/dashboard');
     } catch (err) {
-      console.error('Failed to create trip:', err);
-      if (err instanceof Error) {
-        setLocationError(err.message);
-      } else {
-        setLocationError('An unexpected error occurred. Please try again.');
+      console.error('Error creating trip:', err);
+      const errorMessage = err instanceof Error ? err.message : 'Failed to create trip';
+      
+      // Check if it's an authentication error
+      if (errorMessage.includes('authentication') || errorMessage.includes('log in')) {
+        setError('Please log in to create a trip');
+        navigate('/login');
+        return;
       }
+      
+      setError(errorMessage);
+    } finally {
+      setLoading(false);
     }
   };
 
   // Default center for the map
-  const defaultCenter: L.LatLngTuple = isLocationSet 
-    ? [formData.current_location.latitude, formData.current_location.longitude]
+  const defaultCenter: L.LatLngTuple = formState.currentLocation.latitude !== 0 && formState.currentLocation.longitude !== 0
+    ? [formState.currentLocation.latitude, formState.currentLocation.longitude]
     : [9.0248826, 38.7807792]; // Default to Addis Ababa coordinates
 
   return (
@@ -477,9 +396,9 @@ const TripPlanner = () => {
         <h1 className="text-2xl font-bold text-gray-900">Plan New Trip</h1>
       </div>
       
-      {locationError && (
+      {error && (
         <div className="bg-red-50 border border-red-200 text-red-600 px-4 py-3 rounded-md mb-4">
-          {locationError}
+          {error}
         </div>
       )}
 
@@ -499,9 +418,9 @@ const TripPlanner = () => {
                 url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
               />
               <BoundsUpdater
-                currentLocation={formData.current_location}
-                pickupLocation={formData.pickup_location}
-                dropoffLocation={formData.dropoff_location}
+                currentLocation={formState.currentLocation}
+                pickupLocation={formState.pickupLocation}
+                dropoffLocation={formState.dropoffLocation}
               />
               <MapClickHandler onLocationSelect={handleLocationSelect} />
 
@@ -509,9 +428,9 @@ const TripPlanner = () => {
               {routeGeometry && <RoutePolyline geometry={routeGeometry} />}
               
               {/* Current Location Marker */}
-              {isLocationSet && (
+              {formState.currentLocation.latitude !== 0 && formState.currentLocation.longitude !== 0 && (
                 <LocationMarker 
-                  position={[formData.current_location.latitude, formData.current_location.longitude]} 
+                  position={[formState.currentLocation.latitude, formState.currentLocation.longitude]} 
                   icon={defaultIcon}
                 >
                   <Popup>
@@ -524,9 +443,9 @@ const TripPlanner = () => {
               )}
               
               {/* Pickup Location Marker */}
-              {formData.pickup_location.latitude !== 0 && (
+              {formState.pickupLocation.latitude !== 0 && (
                 <LocationMarker 
-                  position={[formData.pickup_location.latitude, formData.pickup_location.longitude]} 
+                  position={[formState.pickupLocation.latitude, formState.pickupLocation.longitude]} 
                   icon={greenIcon}
                   onRemove={handleRemovePickup}
                 >
@@ -540,25 +459,25 @@ const TripPlanner = () => {
               )}
               
               {/* Dropoff Location Marker */}
-              {formData.dropoff_location.latitude !== 0 && (
+              {formState.dropoffLocation.latitude !== 0 && (
                 <LocationMarker 
-                  position={[formData.dropoff_location.latitude, formData.dropoff_location.longitude]} 
+                  position={[formState.dropoffLocation.latitude, formState.dropoffLocation.longitude]} 
                   icon={redIcon}
                   onRemove={handleRemoveDropoff}
                 >
                   <Popup>
                     <div className="p-2">
                       <div className="font-semibold">Dropoff Location</div>
-                      <div className="text-sm text-gray-600">Stop #{formData.fuel_stop.latitude !== 0 ? '4' : '3'}</div>
+                      <div className="text-sm text-gray-600">Stop #{formState.fuelStop ? '4' : '3'}</div>
                     </div>
                   </Popup>
                 </LocationMarker>
               )}
 
               {/* Fuel Stop Marker */}
-              {hasFuelStop && formData.fuel_stop.latitude !== 0 && (
+              {hasFuelStop && formState.fuelStop && (
                 <LocationMarker
-                  position={[formData.fuel_stop.latitude, formData.fuel_stop.longitude]}
+                  position={[formState.fuelStop.latitude, formState.fuelStop.longitude]}
                   icon={new L.Icon({
                     iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-yellow.png',
                     shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-shadow.png',
@@ -606,10 +525,10 @@ const TripPlanner = () => {
                         step="any"
                         placeholder='Latitude'
                         className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 text-gray-900 focus:border-blue-500 focus:outline-none focus:ring-blue-500 sm:text-sm"
-                        value={formData.current_location.latitude || ''}
-                        onChange={(e) => setFormData({
-                          ...formData,
-                          current_location: { ...formData.current_location, latitude: parseFloat(e.target.value) }
+                        value={formState.currentLocation.latitude || ''}
+                        onChange={(e) => setFormState({
+                          ...formState,
+                          currentLocation: { ...formState.currentLocation, latitude: parseFloat(e.target.value) }
                         })}
                       />
                     </div>
@@ -620,10 +539,10 @@ const TripPlanner = () => {
                         step="any"
                         placeholder='Longitude'
                         className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 text-gray-900 focus:border-blue-500 focus:outline-none focus:ring-blue-500 sm:text-sm"
-                        value={formData.current_location.longitude || ''}
-                        onChange={(e) => setFormData({
-                          ...formData,
-                          current_location: { ...formData.current_location, longitude: parseFloat(e.target.value) }
+                        value={formState.currentLocation.longitude || ''}
+                        onChange={(e) => setFormState({
+                          ...formState,
+                          currentLocation: { ...formState.currentLocation, longitude: parseFloat(e.target.value) }
                         })}
                       />
                     </div>
@@ -646,10 +565,10 @@ const TripPlanner = () => {
                         step="any"
                         placeholder='Latitude'
                         className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 text-gray-900 focus:border-blue-500 focus:outline-none focus:ring-blue-500 sm:text-sm"
-                        value={formData.pickup_location.latitude || ''}
-                        onChange={(e) => setFormData({
-                          ...formData,
-                          pickup_location: { ...formData.pickup_location, latitude: parseFloat(e.target.value) }
+                        value={formState.pickupLocation.latitude || ''}
+                        onChange={(e) => setFormState({
+                          ...formState,
+                          pickupLocation: { ...formState.pickupLocation, latitude: parseFloat(e.target.value) }
                         })}
                       />
                     </div>
@@ -660,10 +579,10 @@ const TripPlanner = () => {
                         step="any"
                         placeholder='Longitude'
                         className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 text-gray-900 focus:border-blue-500 focus:outline-none focus:ring-blue-500 sm:text-sm"
-                        value={formData.pickup_location.longitude || ''}
-                        onChange={(e) => setFormData({
-                          ...formData,
-                          pickup_location: { ...formData.pickup_location, longitude: parseFloat(e.target.value) }
+                        value={formState.pickupLocation.longitude || ''}
+                        onChange={(e) => setFormState({
+                          ...formState,
+                          pickupLocation: { ...formState.pickupLocation, longitude: parseFloat(e.target.value) }
                         })}
                       />
                     </div>
@@ -686,10 +605,10 @@ const TripPlanner = () => {
                         step="any"
                         placeholder='Latitude'
                         className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 text-gray-900 focus:border-blue-500 focus:outline-none focus:ring-blue-500 sm:text-sm"
-                        value={formData.dropoff_location.latitude || ''}
-                        onChange={(e) => setFormData({
-                          ...formData,
-                          dropoff_location: { ...formData.dropoff_location, latitude: parseFloat(e.target.value) }
+                        value={formState.dropoffLocation.latitude || ''}
+                        onChange={(e) => setFormState({
+                          ...formState,
+                          dropoffLocation: { ...formState.dropoffLocation, latitude: parseFloat(e.target.value) }
                         })}
                       />
                     </div>
@@ -700,10 +619,10 @@ const TripPlanner = () => {
                         step="any"
                         placeholder='Longitude'
                         className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 text-gray-900 focus:border-blue-500 focus:outline-none focus:ring-blue-500 sm:text-sm"
-                        value={formData.dropoff_location.longitude || ''}
-                        onChange={(e) => setFormData({
-                          ...formData,
-                          dropoff_location: { ...formData.dropoff_location, longitude: parseFloat(e.target.value) }
+                        value={formState.dropoffLocation.longitude || ''}
+                        onChange={(e) => setFormState({
+                          ...formState,
+                          dropoffLocation: { ...formState.dropoffLocation, longitude: parseFloat(e.target.value) }
                         })}
                       />
                     </div>
@@ -748,10 +667,10 @@ const TripPlanner = () => {
                   step="0.1"
                   id="current_cycle_hours"
                   className="mt-1 block rounded-md border border-gray-300 px-3 py-2 text-gray-900 focus:border-blue-500 focus:outline-none focus:ring-blue-500 sm:text-sm"
-                  value={formData.current_cycle_hours || ''}
-                  onChange={(e) => setFormData({
-                    ...formData,
-                    current_cycle_hours: parseFloat(e.target.value)
+                  value={formState.currentCycleHours || ''}
+                  onChange={(e) => setFormState({
+                    ...formState,
+                    currentCycleHours: parseFloat(e.target.value)
                   })}
                   placeholder="Hours "
                 />

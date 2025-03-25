@@ -2,6 +2,8 @@ import { createSlice, createAsyncThunk } from '@reduxjs/toolkit';
 import { RootState } from '../../store';
 import { Trip, Location, Stop } from '../../types';
 
+const API_BASE_URL = 'http://localhost:8000';
+
 interface TripState {
   trips: Trip[];
   currentTrip: Trip | null;
@@ -26,6 +28,26 @@ const initialState: TripState = {
   },
 };
 
+// Helper function to get auth token
+const getAuthToken = () => {
+  const token = localStorage.getItem('token');
+  console.log('Auth token:', token);
+  if (!token) {
+    throw new Error('No authentication token found. Please log in.');
+  }
+  return token;
+};
+
+// Helper function to get headers
+const getHeaders = () => {
+  const headers = {
+    'Content-Type': 'application/json',
+    'Authorization': `Bearer ${getAuthToken()}`
+  };
+  console.log('Request headers:', headers);
+  return headers;
+};
+
 export const fetchTrips = createAsyncThunk(
   'trips/fetchTrips',
   async ({ page = 1, sortBy = 'id', sortOrder = 'desc' }: { page?: number; sortBy?: string; sortOrder?: 'asc' | 'desc' } = {}) => {
@@ -35,18 +57,16 @@ export const fetchTrips = createAsyncThunk(
         ordering: sortOrder === 'desc' ? `-${sortBy}` : sortBy,
       });
       
-      console.log('Fetching trips with params:', params.toString());
-      const response = await fetch(`/api/trips/?${params.toString()}`);
-      console.log('API Response status:', response.status);
+      const response = await fetch(`${API_BASE_URL}/api/trips/?${params.toString()}`, {
+        headers: getHeaders(),
+      });
       
       if (!response.ok) {
         const errorText = await response.text();
-        console.error('API Error response:', errorText);
-        throw new Error('Failed to fetch trips');
+        throw new Error(errorText || 'Failed to fetch trips');
       }
       
       const data = await response.json();
-      console.log('API Response data:', data);
       
       // Handle both paginated and non-paginated responses
       const trips = Array.isArray(data) ? data : (data.results || []);
@@ -74,12 +94,14 @@ export const fetchTrips = createAsyncThunk(
 export const fetchTrip = createAsyncThunk(
   'trip/fetchTrip',
   async (tripId: string) => {
-    const response = await fetch(`/api/trips/${tripId}`);
+    const response = await fetch(`${API_BASE_URL}/api/trips/${tripId}`, {
+      headers: getHeaders(),
+    });
     if (!response.ok) {
-      throw new Error('Failed to fetch trip');
+      const errorText = await response.text();
+      throw new Error(errorText || 'Failed to fetch trip');
     }
     const data = await response.json();
-    console.log('Fetch Trip API Response data:', data);
     return data as Trip;
   }
 );
@@ -93,37 +115,28 @@ export const createTrip = createAsyncThunk(
     fuel_stop?: Location;
     current_cycle_hours: number;
   }) => {
-    const response = await fetch('/api/trips/', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        ...tripData,
-        current_location: {
-          latitude: tripData.current_location.latitude,
-          longitude: tripData.current_location.longitude
-        },
-        pickup_location: {
-          latitude: tripData.pickup_location.latitude,
-          longitude: tripData.pickup_location.longitude
-        },
-        dropoff_location: {
-          latitude: tripData.dropoff_location.latitude,
-          longitude: tripData.dropoff_location.longitude
-        },
-        fuel_stop: tripData.fuel_stop ? {
-          latitude: tripData.fuel_stop.latitude,
-          longitude: tripData.fuel_stop.longitude
-        } : undefined
-      }),
-    });
-    if (!response.ok) {
-      const errorData = await response.json().catch(() => ({}));
-      console.error('Create Trip API Error:', errorData);
-      throw new Error(errorData.message || 'Failed to create trip');
+    try {
+      // Create trip
+      const response = await fetch(`${API_BASE_URL}/api/trips/`, {
+        method: 'POST',
+        headers: getHeaders(),
+        body: JSON.stringify(tripData),
+      });
+      
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.message || 'Failed to create trip');
+      }
+      
+      const tripResponse = await response.json();
+      console.log('Trip created response:', tripResponse);
+
+      // Return the response directly since it already includes the route and stops
+      return tripResponse;
+    } catch (error) {
+      console.error('Error in createTrip:', error);
+      throw error;
     }
-    return response.json();
   }
 );
 
@@ -133,11 +146,9 @@ export const planRoute = createAsyncThunk(
     const state = getState() as RootState;
     const trip = state.trips.currentTrip;
     
-    const response = await fetch(`/api/trips/${tripId}/plan_route/`, {
+    const response = await fetch(`${API_BASE_URL}/api/trips/${tripId}/plan_route/`, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
+      headers: getHeaders(),
       body: JSON.stringify({
         fuelStop: trip?.fuel_stop ? {
           latitude: trip.fuel_stop.latitude,
@@ -147,27 +158,23 @@ export const planRoute = createAsyncThunk(
     });
     if (!response.ok) {
       const errorData = await response.json().catch(() => ({}));
-      console.error("Plan Route API Error data:", errorData);
       throw new Error(errorData.message || 'Failed to plan route');
     }
-    const data = await response.json();
-    console.log('Plan Route API Response data:', data);
-    return data;
+    return response.json();
   }
 );
 
 export const updateStopStatus = createAsyncThunk(
   'trip/updateStopStatus',
   async ({ tripId, stopId, status }: { tripId: string; stopId: string; status: string }) => {
-    const response = await fetch(`/api/trips/${tripId}/stops/${stopId}/`, {
+    const response = await fetch(`${API_BASE_URL}/api/trips/${tripId}/stops/${stopId}/`, {
       method: 'PATCH',
-      headers: {
-        'Content-Type': 'application/json',
-      },
+      headers: getHeaders(),
       body: JSON.stringify({ status }),
     });
     if (!response.ok) {
-      throw new Error('Failed to update stop status');
+      const errorText = await response.text();
+      throw new Error(errorText || 'Failed to update stop status');
     }
     const data = await response.json();
     return data as Trip;
@@ -177,14 +184,31 @@ export const updateStopStatus = createAsyncThunk(
 export const completeTrip = createAsyncThunk(
   'trip/completeTrip',
   async (tripId: string) => {
-    const response = await fetch(`/api/trips/${tripId}/complete/`, {
+    const response = await fetch(`${API_BASE_URL}/api/trips/${tripId}/complete/`, {
       method: 'POST',
+      headers: getHeaders(),
     });
     if (!response.ok) {
-      throw new Error('Failed to complete trip');
+      const errorText = await response.text();
+      throw new Error(errorText || 'Failed to complete trip');
     }
     const data = await response.json();
     return data as Trip;
+  }
+);
+
+export const deleteTrip = createAsyncThunk(
+  'trip/deleteTrip',
+  async (tripId: string) => {
+    const response = await fetch(`${API_BASE_URL}/api/trips/${tripId}/`, {
+      method: 'DELETE',
+      headers: getHeaders(),
+    });
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(errorText || 'Failed to delete trip');
+    }
+    return tripId;
   }
 );
 
@@ -257,6 +281,12 @@ const tripSlice = createSlice({
       .addCase(completeTrip.fulfilled, (state, action) => {
         if (state.currentTrip) {
           state.currentTrip = action.payload;
+        }
+      })
+      .addCase(deleteTrip.fulfilled, (state, action) => {
+        state.trips = state.trips.filter(trip => trip.id.toString() !== action.payload);
+        if (state.currentTrip?.id.toString() === action.payload) {
+          state.currentTrip = null;
         }
       });
   },

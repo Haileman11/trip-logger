@@ -16,6 +16,7 @@ import { SignUp } from './pages/SignUp';
 import { Login } from './pages/Login';
 import { LandingPage } from './pages/LandingPage';
 import TripExecution from './pages/TripExecution';
+import TripsList from './pages/TripsList';
 
 const AppContent: React.FC = () => {
   const location = useLocation();
@@ -27,7 +28,7 @@ const AppContent: React.FC = () => {
       <main className={showNavigation ? "container mx-auto px-4 py-8" : ""}>
         <Routes>
           <Route path="/" element={<LandingPage />} />
-          <Route path="/dashboard" element={<TripList />} />
+          <Route path="/dashboard" element={<TripsList />} />
           <Route path="/trips" element={<TripList />} />
           <Route path="/trip/new" element={<TripPlanner />} />              
           <Route path="/route-display" element={<RouteAndELDLogDisplay />} />
@@ -70,7 +71,7 @@ const AppContent: React.FC = () => {
               { time: "20:00", status: "offDuty", location: "End" }
             ]}
           />} />
-          <Route path="/signup" element={<SignUp onSignUp={() => {}} />} />
+          <Route path="/signup" element={<SignUp  />} />
           <Route path="/login" element={<Login  />} />
           <Route path="/trip/:tripId/live" element={<TripExecution/>} />
         </Routes>
