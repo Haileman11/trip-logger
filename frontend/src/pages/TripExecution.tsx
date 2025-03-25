@@ -8,13 +8,14 @@ import {
   completeTrip, 
   planRoute,
   createStop,
-  deleteStop
+  deleteStop,
+  updateLocation
 } from '../store/slices/tripSlice';
 import { RootState, AppDispatch } from '../store';
 import TripMap from '../components/TripMap';
 import StopStatusUpdate from '../components/StopStatusUpdate';
 import DutyStatusControl from '../components/DutyStatusControl';
-import { Location, Stop } from '../types';
+import { Location, Stop, Trip } from '../types';
 
 type DutyStatus = 'driving' | 'on_duty' | 'sleeper_berth' | 'off_duty';
 type TripStatus = 'not_started' | 'in_progress' | 'completed';
@@ -28,8 +29,8 @@ const TripExecution: React.FC = () => {
   const { tripId } = useParams<{ tripId: string }>();
   const navigate = useNavigate();
   const dispatch = useDispatch<AppDispatch>();
-  const { currentTrip: trip, loading, error } = useSelector((state: RootState) => state.trips);
-  
+  const [trip, setTrip] = useState<Trip | undefined>(undefined);
+  const {loading, error} = useSelector((state: RootState) => state.trips);
   const [currentLocation, setCurrentLocation] = useState<Location | undefined>(undefined);
   const [currentStatus, setCurrentStatus] = useState<DutyStatus>('off_duty');
   const [tripStatus, setTripStatus] = useState<TripStatus>('not_started');
@@ -40,6 +41,7 @@ const TripExecution: React.FC = () => {
   const [isWithinRange, setIsWithinRange] = useState(false);
   const [timeRemaining, setTimeRemaining] = useState(3600); // 1 hour in seconds
   const [isUpdating, setIsUpdating] = useState(false);
+  // const [watchId, setWatchId] = useState<number | null>(null);
 
   // Fetch trip data and plan route
   useEffect(() => {
@@ -50,8 +52,8 @@ const TripExecution: React.FC = () => {
           const result = await dispatch(fetchTrip(tripId)).unwrap();
           
           // Set initial trip status
-          setTripStatus(result.status === 'completed' ? 'completed' : 'not_started');
-          
+          setTripStatus(result.status === 'completed' ? 'completed' : result.status === 'in_progress' ? 'in_progress' : 'not_started');
+          setTrip(result);
           // Plan route if trip is in planned status and has no route
           if (result.status === 'planned' && !result.route) {
             await dispatch(planRoute(parseInt(tripId))).unwrap();
@@ -66,47 +68,115 @@ const TripExecution: React.FC = () => {
   }, [tripId, dispatch]);
 
   // Initialize current location
+  // useEffect(() => {
+  //   if (trip?.route?.routes?.[0]?.geometry?.coordinates) {
+  //     const coordinates = trip.route.routes[0].geometry.coordinates;
+  //     if (coordinates.length > 0) {
+  //       const [lng, lat] = coordinates[0];
+  //       setCurrentLocation({
+  //         latitude: lat,
+  //         longitude: lng
+  //       });
+  //     }
+  //   }
+  // }, [trip]);
+
+  // Update the useEffect that handles location updates
   useEffect(() => {
-    if (trip?.current_location && 
-        typeof trip.current_location.latitude === 'number' && 
-        typeof trip.current_location.longitude === 'number' && 
-        !currentLocation) {
-      setCurrentLocation(trip.current_location);
-    }
-  }, [trip, currentLocation]);
+    if (!trip) return;
 
-  // Simulate location updates
-  useEffect(() => {
-    if (tripStatus !== 'in_progress') return;
+    // Handle real location updates
+    // const handlePosition = (position: GeolocationPosition) => {
+    //   const newLocation = {
+    //     latitude: position.coords.latitude,
+    //     longitude: position.coords.longitude,
+    //     timestamp: new Date().toISOString(),
+    //   };
+    //   handleLocationUpdate(newLocation);
+    // };
 
-    const interval = setInterval(() => {
-      if (currentLocation && trip?.route?.routes?.[0]?.geometry?.coordinates) {
-        // Get next point, ensuring it has valid coordinates
-        const nextPointIndex = Math.min(currentStopIndex + 1, trip.route.routes[0].geometry.coordinates.length - 1);
-        const nextPoint = trip.route.routes[0].geometry.coordinates[nextPointIndex];
-        
-        if (Array.isArray(nextPoint) && nextPoint.length === 2) {
-          const [lng, lat] = nextPoint;
-          // Update location
-          const updatedLocation: Location = {
-            latitude: currentLocation.latitude + (lat - currentLocation.latitude) ,
-            longitude: currentLocation.longitude + (lng - currentLocation.longitude)  
-          };
-          console.log('Updated location:', updatedLocation);
-          setCurrentLocation(updatedLocation);
+    // const handleError = (error: GeolocationPositionError) => {
+    //   console.error('Geolocation error:', error);
+    // };
 
-          // Check if within range of current stop
-          if (trip.stops?.[currentStopIndex]?.location) {
-            const currentStop = trip.stops[currentStopIndex];
-            const distance = calculateDistance(updatedLocation, currentStop.location);
-            setIsWithinRange(distance <= 0.5); // Within 0.5 miles
+    // const newWatchId = navigator.geolocation.watchPosition(
+    //   handlePosition,
+    //   handleError,
+    //   {
+    //     enableHighAccuracy: true,
+    //     timeout: 5000,
+    //     maximumAge: 0,
+    //   }
+    // );
+
+    // setWatchId(newWatchId);
+
+    // Handle simulated location updates
+    if (tripStatus === 'in_progress') {
+      let currentSegmentIndex = 0;
+      let progressInSegment = 0;
+      const UPDATE_INTERVAL = 5000; // Update every second
+      const MOVEMENT_SPEED = 1; // Adjusted speed for smoother movement
+
+      const interval = setInterval(() => {
+        if (trip?.route?.routes?.[0]?.geometry?.coordinates) {
+          const coordinates = trip.route.routes[0].geometry.coordinates;
+          
+          // Get current and next points
+          const currentPoint = coordinates[currentSegmentIndex];
+          const nextPoint = coordinates[currentSegmentIndex + 1];
+          
+          if (Array.isArray(currentPoint) && Array.isArray(nextPoint)) {
+            const [currentLng, currentLat] = currentPoint;
+            const [nextLng, nextLat] = nextPoint;
+            
+            // Calculate movement
+            progressInSegment += MOVEMENT_SPEED;
+            
+            // Interpolate between current and next point
+            const updatedLocation: Location = {
+              latitude: currentLat + (nextLat - currentLat) * progressInSegment,
+              longitude: currentLng + (nextLng - currentLng) * progressInSegment
+            };
+            
+            // Update location
+            handleLocationUpdate(updatedLocation);
+            
+            // Check if we've reached the next point
+            if (progressInSegment >= 1) {
+              progressInSegment = 0;
+              currentSegmentIndex++;
+              
+              // If we've reached the end of the route, loop back to start
+              if (currentSegmentIndex >= coordinates.length - 1) {
+                currentSegmentIndex = 0;
+              }
+            }
+            
+            // Check if within range of current stop
+            if (trip.stops?.[currentStopIndex]?.location) {
+              const currentStop = trip.stops[currentStopIndex];
+              const distance = calculateDistance(updatedLocation, currentStop.location);
+              setIsWithinRange(distance <= 0.5); // Within 0.5 miles
+            }
           }
         }
-      }
-    }, 5000);
+      }, UPDATE_INTERVAL);
 
-    return () => clearInterval(interval);
-  }, [currentLocation, trip, currentStopIndex, tripStatus]);
+      // return () => {
+      //   clearInterval(interval);
+      //   if (newWatchId) {
+      //     navigator.geolocation.clearWatch(newWatchId);
+      //   }
+      // };
+    }
+
+    // return () => {
+    //   if (newWatchId) {
+    //     navigator.geolocation.clearWatch(newWatchId);
+    //   }
+    // };
+  }, [trip, tripStatus, currentStopIndex]);
 
   // Update duty hours
   useEffect(() => {
@@ -258,6 +328,18 @@ const TripExecution: React.FC = () => {
       console.error('Failed to delete stop:', error);
     } finally {
       setIsUpdating(false);
+    }
+  };
+
+  const handleLocationUpdate = async (location: Location) => {
+    if (!trip) return;
+    
+    try {
+      // await dispatch(updateLocation({ tripId: trip.id.toString(), location })).unwrap();
+      setCurrentLocation(location);
+    } catch (error) {
+      console.error('Failed to update location:', error);
+      // You might want to show an error message to the user here
     }
   };
 
@@ -421,20 +503,31 @@ const TripExecution: React.FC = () => {
           />
         </div>
 
-        {/* Status Logs Section
-        <div className="bg-white rounded-lg shadow-lg p-4">
-          <h2 className="text-xl font-bold mb-4">Status Logs</h2>
-          <div className="space-y-2">
-            {statusLogs.map((log, index) => (
-              <div key={index} className="flex justify-between text-sm">
-                <span className="text-gray-600">{log.status}</span>
-                <span className="text-gray-900">
-                  {format(log.timestamp, 'h:mm a')}
+        
+      </div>
+
+      {/* Add Status Logs Section */}
+      <div className="bg-white rounded-lg shadow-lg p-4">
+        <h2 className="text-xl font-bold mb-4">Recent Status Changes</h2>
+        <div className="space-y-2 max-h-[300px] overflow-y-auto">
+          {statusLogs.map((log, index) => (
+            <div key={index} className="flex items-center justify-between p-2 bg-gray-50 rounded">
+              <div className="flex items-center space-x-2">
+                <span className={`px-2 py-1 rounded text-sm ${
+                  log.status === 'driving' ? 'bg-green-100 text-green-800' :
+                  log.status === 'on_duty' ? 'bg-yellow-100 text-yellow-800' :
+                  log.status === 'sleeper_berth' ? 'bg-blue-100 text-blue-800' :
+                  'bg-gray-100 text-gray-800'
+                }`}>
+                  {log.status.toUpperCase()}
                 </span>
               </div>
-            ))}
-          </div>
-        </div> */}
+              <span className="text-sm text-gray-500">
+                {new Date(log.timestamp).toLocaleTimeString()}
+              </span>
+            </div>
+          ))}
+        </div>
       </div>
     </div>
   );

@@ -206,6 +206,14 @@ interface Trip {
   rest_stops: number;
 }
 
+// Add this interface with the other interfaces
+interface TripCreationResponse {
+  trip: Trip;
+  route: {
+    geometry: GeoJSONLineString;
+  };
+}
+
 const TripPlanner = () => {
   const dispatch = useAppDispatch();
   const navigate = useNavigate();
@@ -346,10 +354,8 @@ const TripPlanner = () => {
       };
 
       console.log("Creating trip with data:", tripPayload);
-      const response = await dispatch(createTrip(tripPayload)).unwrap();
-      console.log("Trip creation response:", response);
-
-      // The response already includes trip, route, and stops
+      const response = await dispatch(createTrip(tripPayload)).unwrap() as TripCreationResponse;
+      
       if (!response.trip || !response.route) {
         throw new Error("Invalid response format from server");
       }
