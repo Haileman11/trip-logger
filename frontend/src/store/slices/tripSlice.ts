@@ -164,17 +164,66 @@ export const planRoute = createAsyncThunk(
   }
 );
 
+export const startTrip = createAsyncThunk(
+  'trip/startTrip',
+  async (tripId: string) => {
+    const response = await fetch(`${API_BASE_URL}/api/trips/${tripId}/start_trip/`, {
+      method: 'POST',
+      headers: getHeaders(),
+    });
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(errorText || 'Failed to start trip');
+    }
+    const data = await response.json();
+    return data as Trip;
+  }
+);
+
 export const updateStopStatus = createAsyncThunk(
   'trip/updateStopStatus',
   async ({ tripId, stopId, status }: { tripId: string; stopId: string; status: string }) => {
-    const response = await fetch(`${API_BASE_URL}/api/trips/${tripId}/stops/${stopId}/`, {
-      method: 'PATCH',
+    const response = await fetch(`${API_BASE_URL}/api/trips/${tripId}/update_stop_status/`, {
+      method: 'POST',
       headers: getHeaders(),
-      body: JSON.stringify({ status }),
+      body: JSON.stringify({ stop_id: stopId, status }),
     });
     if (!response.ok) {
       const errorText = await response.text();
       throw new Error(errorText || 'Failed to update stop status');
+    }
+    const data = await response.json();
+    return data as Trip;
+  }
+);
+
+export const createStop = createAsyncThunk(
+  'trip/createStop',
+  async ({ tripId, stopData }: { tripId: string; stopData: Partial<Stop> }) => {
+    const response = await fetch(`${API_BASE_URL}/api/trips/${tripId}/create_stop/`, {
+      method: 'POST',
+      headers: getHeaders(),
+      body: JSON.stringify(stopData),
+    });
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(errorText || 'Failed to create stop');
+    }
+    const data = await response.json();
+    return data as Trip;
+  }
+);
+
+export const deleteStop = createAsyncThunk(
+  'trip/deleteStop',
+  async ({ tripId, stopId }: { tripId: string; stopId: string }) => {
+    const response = await fetch(`${API_BASE_URL}/api/trips/${tripId}/delete_stop/?stop_id=${stopId}`, {
+      method: 'DELETE',
+      headers: getHeaders(),
+    });
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(errorText || 'Failed to delete stop');
     }
     const data = await response.json();
     return data as Trip;
@@ -273,10 +322,61 @@ const tripSlice = createSlice({
         state.loading = false;
         state.error = action.error.message || 'Failed to plan route';
       })
-      .addCase(updateStopStatus.fulfilled, (state, action) => {
+      .addCase(startTrip.pending, (state) => {
+        state.loading = true;
+        state.error = null;
+      })
+      .addCase(startTrip.fulfilled, (state, action) => {
+        state.loading = false;
         if (state.currentTrip) {
           state.currentTrip = action.payload;
         }
+      })
+      .addCase(startTrip.rejected, (state, action) => {
+        state.loading = false;
+        state.error = action.error.message || 'Failed to start trip';
+      })
+      .addCase(updateStopStatus.pending, (state) => {
+        state.loading = true;
+        state.error = null;
+      })
+      .addCase(updateStopStatus.fulfilled, (state, action) => {
+        state.loading = false;
+        if (state.currentTrip) {
+          state.currentTrip = action.payload;
+        }
+      })
+      .addCase(updateStopStatus.rejected, (state, action) => {
+        state.loading = false;
+        state.error = action.error.message || 'Failed to update stop status';
+      })
+      .addCase(createStop.pending, (state) => {
+        state.loading = true;
+        state.error = null;
+      })
+      .addCase(createStop.fulfilled, (state, action) => {
+        state.loading = false;
+        if (state.currentTrip) {
+          state.currentTrip = action.payload;
+        }
+      })
+      .addCase(createStop.rejected, (state, action) => {
+        state.loading = false;
+        state.error = action.error.message || 'Failed to create stop';
+      })
+      .addCase(deleteStop.pending, (state) => {
+        state.loading = true;
+        state.error = null;
+      })
+      .addCase(deleteStop.fulfilled, (state, action) => {
+        state.loading = false;
+        if (state.currentTrip) {
+          state.currentTrip = action.payload;
+        }
+      })
+      .addCase(deleteStop.rejected, (state, action) => {
+        state.loading = false;
+        state.error = action.error.message || 'Failed to delete stop';
       })
       .addCase(completeTrip.fulfilled, (state, action) => {
         if (state.currentTrip) {

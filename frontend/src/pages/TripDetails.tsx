@@ -5,6 +5,8 @@ import {
   fetchTrip,
   fetchTrips,
   planRoute,
+  startTrip,
+  updateStopStatus,
 } from "../store/slices/tripSlice";
 import type { RootState, AppDispatch } from "../store";
 import {
@@ -20,14 +22,16 @@ import { MdLocationOn, MdLocalGasStation } from "react-icons/md";
 import "leaflet/dist/leaflet.css";
 import L from "leaflet";
 
-import { useNavigate, useParams } from "react-router-dom";
+import { Link, useNavigate, useParams } from "react-router-dom";
 import { useAppDispatch } from "@/hooks/useAppDispatch";
 import { useAppSelector } from "@/hooks/useAppSelector";
-import type { Location, Trip } from "@/types";
+import type { Location, RouteLeg, Trip, Stop } from "@/types";
 import { BoundsUpdater } from "../components/map/BoundsUpdater";
 import { LocationMarker } from "../components/map/LocationMarker";
 import { leafletIcons } from "@/utils/leaflet-icons";
 import { current } from "@reduxjs/toolkit";
+import {  LocateIcon } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
 // Add interfaces for type safety
 interface TimelineEntry {
   type:
@@ -79,26 +83,13 @@ const RoutePolyline = ({ geometry }: { geometry: GeoJSONLineString }) => {
   );
 };
 
-interface Stop {
-  id: number;
-  type?: "fuel" | "rest";
-  location: {
-    latitude: number;
-    longitude: number;
-  };
-  sequence: number;
-  arrival_time: string;
-  departure_time: string | null;
-  status: string;
-}
-
-const TripPlanner = () => {
+const TripDetails = () => {
   const { tripId } = useParams<{ tripId: string }>();
   const dispatch = useAppDispatch();
   const [trip, setTrip] = useState<Trip | null>();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
-
+  const navigate = useNavigate();
   useEffect(() => {
     const fetchData = async () => {
       try {
@@ -135,6 +126,11 @@ const TripPlanner = () => {
     const minutes = Math.floor((seconds % 3600) / 60);
     return `${hours}h ${minutes}m`;
   };
+  const formatDurationfromMinutes = (minutes: number): string => {
+    const hours = Math.floor(minutes / 60);
+    const minutesValue = Math.floor((minutes % 60) / 60);
+    return `${hours}h ${minutesValue}m`;
+  };
 
   const formatDistance = (meters: number): string => {
     const miles = (meters / 1609.34).toFixed(1);
@@ -146,6 +142,35 @@ const TripPlanner = () => {
     trip != null
       ? [trip?.current_location.latitude, trip?.current_location.longitude]
       : [9.0248826, 38.7807792]; // Default to Addis Ababa coordinates
+      function createStopIcon(stopType: string) {
+        switch (stopType) {
+          case "pickup":
+            return <MdLocationOn height={"2em"} width={"2em"} color="green" />
+          case "dropoff":
+            return <MdLocationOn height={"2em"} width={"2em"} color="red" />
+            
+           
+          case "fuel":
+            
+            return  <MdLocationOn height={"2em"} width={"2em"} color="yellow" />
+            
+            
+              case "rest":
+            return <MdLocationOn height={"2em"} width={"2em"} color="gray" />
+
+          default:
+            return <MdLocationOn height={"2em"} width={"2em"} color="gray" />
+            
+
+        }
+      }
+  function handleStartTrip(event: React.MouseEvent<HTMLButtonElement>): void {
+    console.log("Starting trip");
+    dispatch(startTrip(tripId!));
+    console.log("Trip started");
+    console.log(trip);
+    navigate("/trip/" + tripId + "/live");
+  }
 
   return (
     <div className="max-w-7xl mx-auto p-6">
@@ -156,9 +181,35 @@ const TripPlanner = () => {
       )}
       {/* Header */}
       <div className="flex items-center justify-between mb-8">
-        <h1 className="text-2xl font-bold text-gray-900">Trip Status</h1>
+        <h1 className="text-2xl font-bold text-gray-900">Trip Details</h1>
       </div>
-
+      {trip && <div className="bg-white rounded-lg shadow-lg p-4">
+        <div className="flex justify-between items-center">
+          <div>
+            <h2 className="text-xl font-bold">Trip Status: <Badge >{trip?.status.toUpperCase()}</Badge></h2>
+            <p className="text-sm text-gray-600">
+              {/* Trip ID: {trip?.id} | Current Stop: {trip?.stops.findIndex((stop)=>stop.status == "pending")|| trip?.stops.length } of {trip?.stops.length} */}
+            From <span className="font-bold">{trip?.route?.routes?.[0]?.legs[0].summary}</span> to <span className="font-bold">{trip?.route?.routes?.[0]?.legs[trip?.route?.routes?.[0]?.legs.length - 1].summary}</span> 
+            </p>
+          </div>
+          {trip?.status === 'planned' && (
+            <button
+              onClick={handleStartTrip}
+              className="bg-green-600 text-white px-6 py-2 rounded-lg hover:bg-green-700"
+            >
+              Start Trip
+            </button>
+          )}
+          {trip?.status === 'in_progress' && (
+            <Link 
+              to={`/trip/${tripId}/live`}
+              className="bg-green-600 text-white px-6 py-2 rounded-lg hover:bg-green-700"
+            >
+              Log Trip
+            </Link>
+          )}
+        </div>
+      </div>}
       {trip && (
         <div className="flex md:flex-col gap-8">
           {/* Right Column - Map */}
@@ -183,7 +234,7 @@ const TripPlanner = () => {
                 {/* <MapClickHandler onLocationSelect={handleLocationSelect} /> */}
 
                 {/* Update RoutePolyline rendering */}
-                {routeGeometry && <RoutePolyline geometry={routeGeometry} />}
+                {trip.route?.routes?.[0]?.geometry && <RoutePolyline geometry={trip.route?.routes?.[0]?.geometry as GeoJSONLineString} />}
 
                 {/* Current Location Marker */}
                 {trip.current_location.latitude !== 0 &&
@@ -203,62 +254,29 @@ const TripPlanner = () => {
                       </Popup>
                     </LocationMarker>
                   )}
-
-                {/* Pickup Location Marker */}
-                {trip.pickup_location.latitude !== 0 && (
+                  {trip.stops.map((stop: Stop, index: number) => (
+                
+                
                   <LocationMarker
+                    key={index}
                     position={[
-                      trip.pickup_location.latitude,
-                      trip.pickup_location.longitude,
+                      stop.location.latitude,
+                      stop.location.longitude,
                     ]}
-                    icon={leafletIcons.greenIcon}
+                    icon={stop.stop_type == "pickup" ? leafletIcons.greenIcon : stop.stop_type == "dropoff" ? leafletIcons.redIcon : stop.stop_type == "fuel" ? leafletIcons.yellowIcon : stop.stop_type == "rest" ? leafletIcons.blueIcon : leafletIcons.defaultIcon}
                   >
                     <Popup>
                       <div className="p-2">
-                        <div className="font-semibold">Pickup Location</div>
-                        <div className="text-sm text-gray-600">Stop #2</div>
+                        <div className="font-semibold">{stop.stop_type.toUpperCase()}</div>
+                        <div className="text-sm text-gray-600">{stop.summary }</div>
+                        <div className="text-sm text-gray-600">Stop {stop.sequence }</div>
+                        <div className="text-sm text-gray-600">{stop.location.latitude}, {stop.location.longitude}</div>
                       </div>
                     </Popup>
                   </LocationMarker>
-                )}
+                ))}
 
-                {/* Dropoff Location Marker */}
-                {trip.dropoff_location.latitude !== 0 && (
-                  <LocationMarker
-                    position={[
-                      trip.dropoff_location.latitude,
-                      trip.dropoff_location.longitude,
-                    ]}
-                    icon={leafletIcons.redIcon}
-                  >
-                    <Popup>
-                      <div className="p-2">
-                        <div className="font-semibold">Dropoff Location</div>
-                        <div className="text-sm text-gray-600">
-                          Stop #{trip.fuel_stop ? "4" : "3"}
-                        </div>
-                      </div>
-                    </Popup>
-                  </LocationMarker>
-                )}
-
-                {/* Fuel Stop Marker */}
-                {hasFuelStop && trip.fuel_stop && (
-                  <LocationMarker
-                    position={[
-                      trip.fuel_stop.latitude,
-                      trip.fuel_stop.longitude,
-                    ]}
-                    icon={leafletIcons.yellowIcon}
-                  >
-                    <Popup>
-                      <div className="p-2">
-                        <div className="font-semibold">Fuel Stop</div>
-                        <div className="text-sm text-gray-600">Stop #3</div>
-                      </div>
-                    </Popup>
-                  </LocationMarker>
-                )}
+                
               </MapContainer>
             </div>
             {/* <p className="p-4 text-sm text-gray-500">
@@ -272,22 +290,26 @@ const TripPlanner = () => {
 
       {/* Bottom Sections */}
       {trip && routeData && (
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mt-8">
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mt-8">
           {/* Route Timeline */}
           <div className="bg-white rounded-lg shadow-sm p-6">
             <h2 className="text-lg font-semibold mb-4">Route Timeline</h2>
             <div className="space-y-6">
-              {trip.route?.routes?.map((stop: any, index: number) => (
+              {trip.route?.routes?.[0]?.legs.map((stop: RouteLeg, index: number) => (
                 <div key={index} className="flex items-start space-x-3">
                   <div className="flex-shrink-0">
-                    {/* Stop Index Badge */}
-                    <div className="w-8 h-8 rounded-full bg-gray-100 flex items-center justify-center text-sm font-medium text-gray-600">
-                      {stop.index + 1}
+                      
+                    <div className="w-16 h-16 rounded-full  flex flex-col items-center justify-center text-sm font-medium text-gray-600">
+                    {createStopIcon(trip.stops[index].stop_type)}
+                      {/* {index + 1} */}
                     </div>
                   </div>
                   <div>
-                    <p className="font-medium text-gray-900">{stop.location}</p>
-                    <p className="text-sm text-gray-500">{stop.time}</p>
+                    <p className="font-sm text-gray-900">{trip.stops[index].stop_type.toUpperCase()}</p>
+                    <p className="font-medium text-gray-900">{stop.summary}</p>
+                    <p className="font-medium text-gray-900">{formatDurationfromMinutes(trip.stops[index].cycle_hours_at_stop * 60)} cycle hours</p>
+                    <p className="font-medium text-gray-900">Arriving in {formatDuration(stop.duration)}</p>
+                    <p className="text-sm text-gray-500">{formatDistance(stop.distance)}</p>
                   </div>
                 </div>
               ))}
@@ -296,56 +318,77 @@ const TripPlanner = () => {
 
           {/* ELD Logs */}
           <div className="bg-white rounded-lg shadow-sm p-6">
-            <h2 className="text-lg font-semibold mb-4">ELD Logs</h2>
+            <h2 className="text-lg font-semibold mb-4">Estimated ELD Logs</h2>
             <div className="space-y-4">
-              <div>
-                <div className="flex justify-between items-center mb-1">
-                  <span className="text-sm text-gray-600">Driving Time</span>
-                  <span className="text-sm font-medium">
-                    {routeData.eldLogs.drivingTime}
-                  </span>
-                </div>
-                <div className="w-full bg-gray-200 rounded-full h-2">
-                  <div
-                    className="bg-green-500 h-2 rounded-full"
-                    style={{ width: "70%" }}
-                  ></div>
-                </div>
-              </div>
-              <div>
-                <div className="flex justify-between items-center mb-1">
-                  <span className="text-sm text-gray-600">On Duty</span>
-                  <span className="text-sm font-medium">
-                    {routeData.eldLogs.onDuty}
-                  </span>
-                </div>
-                <div className="w-full bg-gray-200 rounded-full h-2">
-                  <div
-                    className="bg-yellow-500 h-2 rounded-full"
-                    style={{ width: "30%" }}
-                  ></div>
-                </div>
-              </div>
-              <div>
-                <div className="flex justify-between items-center mb-1">
-                  <span className="text-sm text-gray-600">Rest Time</span>
-                  <span className="text-sm font-medium">
-                    {routeData.eldLogs.restTime}
-                  </span>
-                </div>
-                <div className="w-full bg-gray-200 rounded-full h-2">
-                  <div
-                    className="bg-blue-500 h-2 rounded-full"
-                    style={{ width: "50%" }}
-                  ></div>
-                </div>
-              </div>
+              {(() => {
+                const drivingTime = trip.route?.routes?.[0]?.duration || 0;
+                const onDutyTime = trip.stops
+                  .filter((stop) => stop.stop_type === "pickup" || stop.stop_type === "dropoff")
+                  .map((stop) => stop.duration_minutes)
+                  .reduce((prev, current) => prev + current, 0) * 60;
+                const restTime = trip.stops
+                  .filter((stop) => stop.stop_type === "rest")
+                  .map((stop) => stop.duration_minutes)
+                  .reduce((prev, current) => prev + current, 0) * 60;
+                
+                const totalTime = drivingTime + onDutyTime + restTime;
+                const drivingPercentage = (drivingTime / totalTime) * 100;
+                const onDutyPercentage = (onDutyTime / totalTime) * 100;
+                const restPercentage = (restTime / totalTime) * 100;
+
+                return (
+                  <>
+                    <div>
+                      <div className="flex justify-between items-center mb-1">
+                        <span className="text-sm text-gray-600">Driving Time</span>
+                        <span className="text-sm font-medium">
+                          {formatDuration(drivingTime)}
+                        </span>
+                      </div>
+                      <div className="w-full bg-gray-200 rounded-full h-2">
+                        <div
+                          className="bg-green-500 h-2 rounded-full"
+                          style={{ width: `${drivingPercentage}%` }}
+                        ></div>
+                      </div>
+                    </div>
+                    <div>
+                      <div className="flex justify-between items-center mb-1">
+                        <span className="text-sm text-gray-600">On Duty</span>
+                        <span className="text-sm font-medium">
+                          {formatDuration(onDutyTime)}
+                        </span>
+                      </div>
+                      <div className="w-full bg-gray-200 rounded-full h-2">
+                        <div
+                          className="bg-yellow-500 h-2 rounded-full"
+                          style={{ width: `${onDutyPercentage}%` }}
+                        ></div>
+                      </div>
+                    </div>
+                    <div>
+                      <div className="flex justify-between items-center mb-1">
+                        <span className="text-sm text-gray-600">Rest Time</span>
+                        <span className="text-sm font-medium">
+                          {formatDuration(restTime)}
+                        </span>
+                      </div>
+                      <div className="w-full bg-gray-200 rounded-full h-2">
+                        <div
+                          className="bg-blue-500 h-2 rounded-full"
+                          style={{ width: `${restPercentage}%` }}
+                        ></div>
+                      </div>
+                    </div>
+                  </>
+                );
+              })()}
             </div>
           </div>
 
           {/* Trip Summary */}
           <div className="bg-white rounded-lg shadow-sm p-6">
-            <h2 className="text-lg font-semibold mb-4">Trip Summary</h2>
+            <h2 className="text-lg font-semibold mb-4">Planned Trip Summary</h2>
             <div className="space-y-4">
               <div className="flex items-center justify-between">
                 <div className="flex items-center space-x-2">
@@ -354,9 +397,7 @@ const TripPlanner = () => {
                 </div>
                 <span className="font-medium">
                   {formatDistance(
-                    trip.route?.routes
-                      ?.map((route) => route.distance)
-                      .reduce((prev, current) => prev + current)!
+                    trip.route?.routes?.[0]?.distance!
                   )}
                 </span>
               </div>
@@ -367,9 +408,7 @@ const TripPlanner = () => {
                 </div>
                 <span className="font-medium">
                   {formatDuration(
-                    trip.route?.routes
-                      ?.map((route) => route.duration)
-                      .reduce((prev, current) => prev + current)!
+                    trip.route?.routes?.[0]?.duration!
                   )}
                 </span>
               </div>
@@ -380,7 +419,7 @@ const TripPlanner = () => {
                 </div>
                 <span className="font-medium">
                   {
-                    trip.stops?.map((stop) => (stop.stop_type = "fuel"))
+                    trip.stops.filter((stop) => (stop.stop_type == "fuel"))
                       .length
                   }
                 </span>
@@ -392,7 +431,7 @@ const TripPlanner = () => {
                 </div>
                 <span className="font-medium">
                   {
-                    trip.stops?.map((stop) => (stop.stop_type = "rest"))
+                    trip.stops.filter((stop) => (stop.stop_type == "rest"))
                       .length
                   }
                 </span>
@@ -405,4 +444,4 @@ const TripPlanner = () => {
   );
 };
 
-export default TripPlanner;
+export default TripDetails;

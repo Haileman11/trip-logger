@@ -2,7 +2,14 @@ import React, { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useDispatch, useSelector } from 'react-redux';
 import { format } from 'date-fns';
-import { fetchTrip, updateStopStatus, completeTrip, planRoute } from '../store/slices/tripSlice';
+import { 
+  fetchTrip, 
+  updateStopStatus, 
+  completeTrip, 
+  planRoute,
+  createStop,
+  deleteStop
+} from '../store/slices/tripSlice';
 import { RootState, AppDispatch } from '../store';
 import TripMap from '../components/TripMap';
 import StopStatusUpdate from '../components/StopStatusUpdate';
@@ -201,6 +208,59 @@ const TripExecution: React.FC = () => {
     ]);
   };
 
+  const handleCreateStop = async () => {
+    if (!trip?.stops || !tripId || isUpdating) return;
+    
+    setIsUpdating(true);
+    try {
+      // Get the last stop's location as a reference
+      const lastStop = trip.stops[trip.stops.length - 1];
+      
+      // Create a new rest stop near the last stop
+      await dispatch(createStop({
+        tripId,
+        stopData: {
+          location: {
+            latitude: lastStop.location.latitude + 0.01, // Slightly offset from last stop
+            longitude: lastStop.location.longitude + 0.01
+          },
+          stop_type: 'rest',
+          duration_minutes: 30,
+          cycle_hours_at_stop: lastStop.cycle_hours_at_stop + 0.5,
+          distance_from_last_stop: 1.0 // Approximate 1 mile from last stop
+        }
+      })).unwrap();
+      
+      // Fetch updated trip data
+      await dispatch(fetchTrip(tripId)).unwrap();
+    } catch (error) {
+      console.error('Failed to create stop:', error);
+    } finally {
+      setIsUpdating(false);
+    }
+  };
+
+  const handleDeleteStop = async (stopId: string) => {
+    if (!tripId || isUpdating) return;
+    
+    setIsUpdating(true);
+    try {
+      await dispatch(deleteStop({ tripId, stopId })).unwrap();
+      
+      // Fetch updated trip data
+      await dispatch(fetchTrip(tripId)).unwrap();
+      
+      // If we deleted the current stop, move to the next one
+      if (trip?.stops[currentStopIndex]?.id.toString() === stopId) {
+        setCurrentStopIndex(prev => Math.max(0, prev - 1));
+      }
+    } catch (error) {
+      console.error('Failed to delete stop:', error);
+    } finally {
+      setIsUpdating(false);
+    }
+  };
+
   const calculateDistance = (loc1: Location, loc2: Location): number => {
     // Haversine formula implementation
     const R = 3959; // Earth's radius in miles
@@ -276,9 +336,18 @@ const TripExecution: React.FC = () => {
         </div>
 
         {/* Stops List Section */}
-        <div className="bg-white rounded-lg shadow-lg p-4">
-          <h2 className="text-xl font-bold mb-4">Stops</h2>
-          <div className="space-y-4">
+        <div className="bg-white rounded-lg shadow-lg p-4 lg:col-span-2">
+          <div className="flex justify-between items-center mb-4">
+            <h2 className="text-xl font-bold">Stops</h2>
+            <button
+              onClick={handleCreateStop}
+              disabled={isUpdating || tripStatus !== 'in_progress'}
+              className="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              Add Rest Stop
+            </button>
+          </div>
+          <div className="space-y-4 overflow-y-auto max-h-[500px]">
             {trip.stops.map((stop, index) => (
               <div
                 key={stop.id}
@@ -305,24 +374,35 @@ const TripExecution: React.FC = () => {
                     )}
                   </div>
                   
-                  <span className={`px-2 py-1 rounded text-sm ${
-                    stop.status === 'completed'
-                      ? 'bg-green-100 text-green-800'
-                      : stop.status === 'skipped'
-                      ? 'bg-red-100 text-red-800'
-                      : 'bg-gray-100 text-gray-800'
-                  }`}>
-                    {stop.status.toUpperCase()}
-                  </span>
+                  <div className="flex items-center gap-2">
+                    <span className={`px-2 py-1 rounded text-sm ${
+                      stop.status === 'completed'
+                        ? 'bg-green-100 text-green-800'
+                        : stop.status === 'skipped'
+                        ? 'bg-red-100 text-red-800'
+                        : 'bg-gray-100 text-gray-800'
+                    }`}>
+                      {stop.status.toUpperCase()}
+                    </span>
+                    {stop.stop_type === 'rest' && tripStatus === 'in_progress' && (
+                      <button
+                        onClick={() => handleDeleteStop(stop.id.toString())}
+                        disabled={isUpdating}
+                        className="text-red-600 hover:text-red-800 disabled:opacity-50"
+                      >
+                        Delete
+                      </button>
+                    )}
+                  </div>
                 </div>
-                  {currentStopIndex === index && <StopStatusUpdate
-                    stop={stop}
-                    isWithinRange={isWithinRange}
-                    onConfirm={handleStopConfirmation}
-                    onSkip={handleSkipStop}
-                    timeRemaining={timeRemaining}
-                    isUpdating={isUpdating}
-                  />}
+                {currentStopIndex === index && <StopStatusUpdate
+                  stop={stop}
+                  isWithinRange={isWithinRange}
+                  onConfirm={handleStopConfirmation}
+                  onSkip={handleSkipStop}
+                  timeRemaining={timeRemaining}
+                  isUpdating={isUpdating}
+                />}
               </div>
             ))}
           </div>
@@ -330,7 +410,7 @@ const TripExecution: React.FC = () => {
 
         
         {/* Duty Status Section */}
-        <div className="bg-white rounded-lg shadow-lg p-4">
+        <div className="bg-white rounded-lg shadow-lg p-4 lg:col-span-2">
           <DutyStatusControl
             currentStatus={currentStatus}
             onStatusChange={handleStatusChange}
@@ -341,7 +421,7 @@ const TripExecution: React.FC = () => {
           />
         </div>
 
-        {/* Status Logs Section */}
+        {/* Status Logs Section
         <div className="bg-white rounded-lg shadow-lg p-4">
           <h2 className="text-xl font-bold mb-4">Status Logs</h2>
           <div className="space-y-2">
@@ -354,7 +434,7 @@ const TripExecution: React.FC = () => {
               </div>
             ))}
           </div>
-        </div>
+        </div> */}
       </div>
     </div>
   );

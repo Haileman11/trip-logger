@@ -150,15 +150,20 @@ class TripViewSet(viewsets.ModelViewSet):
                 # Determine stop type based on sequence and fuel stop presence
                 if i == 0:
                     stop_type = "pickup"
+                    last_stop_location = trip.pickup_location
                 elif fuel_stop and i == 1:
                     stop_type = "fuel"
+                    print(f"Fuel stop: {fuel_stop}")
+                    last_stop_location = fuel_stop
                 else:
                     stop_type = "dropoff"
+                    last_stop_location = trip.dropoff_location
 
                 # Create the stop
                 stop = Stop.objects.create(
                     trip=trip,
                     location=last_stop_location,
+                    summary=leg["summary"],
                     sequence=i + 1,
                     status="pending",
                     stop_type=stop_type,
@@ -409,6 +414,172 @@ class TripViewSet(viewsets.ModelViewSet):
             print(f"Traceback: {traceback.format_exc()}")
             return Response(
                 {"error": f"Failed to complete trip: {str(e)}"},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
+
+    @action(detail=True, methods=["post"])
+    def start_trip(self, request, pk=None):
+        try:
+            trip = self.get_object()
+            print(f"Starting trip: {trip.id}")
+
+            # Update trip status
+            trip.status = "in_progress"
+            trip.save()
+
+            # Update first stop to in_progress
+            first_stop = trip.stops.first()
+            if first_stop:
+                first_stop.status = "in_progress"
+                first_stop.save()
+
+            response_data = {
+                "trip": self.get_serializer(trip).data,
+                "route": trip.route,
+                "stops": StopSerializer(trip.stops.all(), many=True).data,
+            }
+            return Response(response_data)
+
+        except Exception as e:
+            print(f"Error starting trip: {str(e)}")
+            import traceback
+            print(f"Traceback: {traceback.format_exc()}")
+            return Response(
+                {"error": f"Failed to start trip: {str(e)}"},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
+
+    @action(detail=True, methods=["post"])
+    def update_stop_status(self, request, pk=None):
+        try:
+            trip = self.get_object()
+            stop_id = request.data.get("stop_id")
+            new_status = request.data.get("status")
+
+            if not stop_id or not new_status:
+                return Response(
+                    {"error": "stop_id and status are required"},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
+            stop = trip.stops.filter(id=stop_id).first()
+            if not stop:
+                return Response(
+                    {"error": "Stop not found"},
+                    status=status.HTTP_404_NOT_FOUND,
+                )
+
+            stop.status = new_status
+            stop.save()
+
+            # If all stops are completed, update trip status
+            if all(s.status == "completed" for s in trip.stops.all()):
+                trip.status = "completed"
+                trip.save()
+
+            response_data = {
+                "trip": self.get_serializer(trip).data,
+                "route": trip.route,
+                "stops": StopSerializer(trip.stops.all(), many=True).data,
+            }
+            return Response(response_data)
+
+        except Exception as e:
+            print(f"Error updating stop status: {str(e)}")
+            import traceback
+            print(f"Traceback: {traceback.format_exc()}")
+            return Response(
+                {"error": f"Failed to update stop status: {str(e)}"},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
+
+    @action(detail=True, methods=["post"])
+    def create_stop(self, request, pk=None):
+        try:
+            trip = self.get_object()
+            print(f"Creating stop for trip: {trip.id}")
+
+            # Get the last stop's sequence
+            last_stop = trip.stops.order_by("-sequence").first()
+            next_sequence = (last_stop.sequence + 1) if last_stop else 1
+
+            # Create new stop
+            stop_data = {
+                "trip": trip,
+                "location": request.data.get("location"),
+                "sequence": next_sequence,
+                "status": "pending",
+                "stop_type": request.data.get("stop_type", "rest"),
+                "duration_minutes": request.data.get("duration_minutes", 0),
+                "cycle_hours_at_stop": request.data.get("cycle_hours_at_stop"),
+                "distance_from_last_stop": request.data.get("distance_from_last_stop"),
+                "summary": request.data.get("summary", ""),
+            }
+
+            stop = Stop.objects.create(**stop_data)
+
+            response_data = {
+                "trip": self.get_serializer(trip).data,
+                "route": trip.route,
+                "stops": StopSerializer(trip.stops.all(), many=True).data,
+            }
+            return Response(response_data)
+
+        except Exception as e:
+            print(f"Error creating stop: {str(e)}")
+            import traceback
+            print(f"Traceback: {traceback.format_exc()}")
+            return Response(
+                {"error": f"Failed to create stop: {str(e)}"},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
+
+    @action(detail=True, methods=["delete"])
+    def delete_stop(self, request, pk=None):
+        try:
+            trip = self.get_object()
+            stop_id = request.query_params.get("stop_id")
+
+            if not stop_id:
+                return Response(
+                    {"error": "stop_id is required"},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
+            stop = trip.stops.filter(id=stop_id).first()
+            if not stop:
+                return Response(
+                    {"error": "Stop not found"},
+                    status=status.HTTP_404_NOT_FOUND,
+                )
+
+            # Only allow deletion of rest stops
+            if stop.stop_type != "rest":
+                return Response(
+                    {"error": "Only rest stops can be deleted"},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
+            stop.delete()
+
+            # Reorder remaining stops
+            for idx, stop in enumerate(trip.stops.order_by("sequence"), 1):
+                stop.sequence = idx
+                stop.save()
+
+            response_data = {
+                "trip": self.get_serializer(trip).data,
+                "route": trip.route,
+                "stops": StopSerializer(trip.stops.all(), many=True).data,
+            }
+            return Response(response_data)
+
+        except Exception as e:
+            print(f"Error deleting stop: {str(e)}")
+            import traceback
+            print(f"Traceback: {traceback.format_exc()}")
+            return Response(
+                {"error": f"Failed to delete stop: {str(e)}"},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR,
             )
 

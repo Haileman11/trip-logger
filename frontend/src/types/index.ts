@@ -8,6 +8,7 @@ export interface Stop {
   trip: string;
   location: Location;
   sequence: number;
+  summary: string;
   status: 'pending' | 'completed' | 'skipped';
   stop_type: 'pickup' | 'dropoff' | 'rest' | 'fuel';
   arrival_time: string;
@@ -39,6 +40,7 @@ export interface RouteGeometry {
 export interface RouteLeg {
   distance: number;
   duration: number;
+  summary: string;
   steps: any[];
 }
 
