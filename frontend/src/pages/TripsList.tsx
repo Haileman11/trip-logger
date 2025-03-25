@@ -1,8 +1,8 @@
-import { useEffect, useState } from 'react';
-import { useDispatch, useSelector } from 'react-redux';
-import { AppDispatch, RootState } from '../store';
-import { fetchTrips, deleteTrip } from '../store/slices/tripSlice';
-import { Button } from '@/components/ui/button';
+import { useEffect, useState } from "react";
+import { useDispatch, useSelector } from "react-redux";
+import { AppDispatch, RootState } from "../store";
+import { fetchTrips, deleteTrip } from "../store/slices/tripSlice";
+import { Button } from "@/components/ui/button";
 import {
   Table,
   TableBody,
@@ -10,7 +10,7 @@ import {
   TableHead,
   TableHeader,
   TableRow,
-} from '@/components/ui/table';
+} from "@/components/ui/table";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -18,31 +18,31 @@ import {
   DropdownMenuLabel,
   DropdownMenuTrigger,
   DropdownMenuSeparator,
-} from '@/components/ui/dropdown-menu';
-import { Input } from '@/components/ui/input';
-import { Badge } from '@/components/ui/badge';
-import { MoreHorizontal, Search, Trash2, Eye } from 'lucide-react';
-import { format, parseISO } from 'date-fns';
-import { useNavigate } from 'react-router-dom';
-import { Trip } from '../types';
+} from "@/components/ui/dropdown-menu";
+import { Input } from "@/components/ui/input";
+import { Badge } from "@/components/ui/badge";
+import { MoreHorizontal, Search, Trash2, Eye } from "lucide-react";
+import { format, parseISO } from "date-fns";
+import { useNavigate } from "react-router-dom";
+import { Trip } from "../types";
 
 export default function TripsList() {
   const dispatch = useDispatch<AppDispatch>();
   const navigate = useNavigate();
   const trips = useSelector((state: RootState) => state.trips.trips);
-  const [searchQuery, setSearchQuery] = useState('');
+  const [searchQuery, setSearchQuery] = useState("");
 
   useEffect(() => {
-    dispatch(fetchTrips({ page: 1, sortBy: 'id', sortOrder: 'desc' }));
+    dispatch(fetchTrips({ page: 1, sortBy: "id", sortOrder: "desc" }));
   }, [dispatch]);
 
   const handleDelete = async (tripId: string) => {
-    if (window.confirm('Are you sure you want to delete this trip?')) {
+    if (window.confirm("Are you sure you want to delete this trip?")) {
       try {
         await dispatch(deleteTrip(tripId)).unwrap();
-        dispatch(fetchTrips({ page: 1, sortBy: 'id', sortOrder: 'desc' }));
+        dispatch(fetchTrips({ page: 1, sortBy: "id", sortOrder: "desc" }));
       } catch (error) {
-        console.error('Failed to delete trip:', error);
+        console.error("Failed to delete trip:", error);
       }
     }
   };
@@ -55,16 +55,16 @@ export default function TripsList() {
     );
   });
 
-  const getStatusColor = (status: Trip['status']) => {
+  const getStatusColor = (status: Trip["status"]) => {
     switch (status) {
-      case 'completed':
-        return 'bg-green-500';
-      case 'in_progress':
-        return 'bg-blue-500';
-      case 'planned':
-        return 'bg-yellow-500';
+      case "completed":
+        return "bg-green-500";
+      case "in_progress":
+        return "bg-blue-500";
+      case "planned":
+        return "bg-yellow-500";
       default:
-        return 'bg-gray-500';
+        return "bg-gray-500";
     }
   };
 
@@ -82,9 +82,7 @@ export default function TripsList() {
               className="pl-8"
             />
           </div>
-          <Button onClick={() => navigate('/trip/new')}>
-            New Trip
-          </Button>
+          <Button onClick={() => navigate("/trip/new")}>New Trip</Button>
         </div>
       </div>
 
@@ -111,33 +109,36 @@ export default function TripsList() {
                   </Badge>
                 </TableCell>
                 <TableCell>
-                  {trip.created_by ? `${trip.created_by.first_name} ${trip.created_by.last_name}` : 'N/A'}
+                  {trip.created_by
+                    ? `${trip.created_by.first_name} ${trip.created_by.last_name}`
+                    : "N/A"}
                 </TableCell>
                 <TableCell>
-                  {trip.created_at ? format(parseISO(trip.created_at), 'MMM d, yyyy HH:mm') : 'N/A'}
+                  {trip.created_at
+                    ? format(parseISO(trip.created_at), "MMM d, yyyy HH:mm")
+                    : "N/A"}
                 </TableCell>
                 <TableCell>
-                  {trip.current_location.latitude?.toFixed(4)}, {trip.current_location.longitude?.toFixed(4)}
+                  {trip.current_location.latitude?.toFixed(4)},{" "}
+                  {trip.current_location.longitude?.toFixed(4)}
                 </TableCell>
                 <TableCell>{trip.current_cycle_hours?.toFixed(1)}</TableCell>
                 <TableCell>
                   <DropdownMenu>
                     <DropdownMenuTrigger asChild>
-
-                        <MoreHorizontal className="h-4 w-4" />
-                      
+                      <MoreHorizontal className="h-4 w-4" />
                     </DropdownMenuTrigger>
                     <DropdownMenuContent align="end">
                       <DropdownMenuLabel>Actions</DropdownMenuLabel>
                       <DropdownMenuItem
-                        onClick={() => navigate(`/trip-execution/${trip.id}`)}
+                        onClick={() => navigate(`/trip/${trip.id}`)}
                       >
                         <Eye className="mr-2 h-4 w-4" />
                         View Details
                       </DropdownMenuItem>
-                      {trip.status === 'planned' && (
+                      {trip.status === "planned" && (
                         <DropdownMenuItem
-                          onClick={() => navigate(`/trip-execution/${trip.id}`)}
+                          onClick={() => navigate(`/trip/${trip.id}/live`)}
                         >
                           Start Trip
                         </DropdownMenuItem>

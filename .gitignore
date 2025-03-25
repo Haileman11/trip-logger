@@ -1,4 +1,4 @@
-.venv/
+venv/
 __pycache__/
 *.pyc
 *.pyo
@@ -10,3 +10,4 @@ node_modules
 dist
 dist-ssr
 *.local
+backend/venv/pyvenv.cfg
