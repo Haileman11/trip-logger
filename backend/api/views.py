@@ -10,9 +10,12 @@ from .serializers import (
     TripSerializer,
     TripCreateSerializer,
     LogSheetSerializer,
+    LogSheetCreateSerializer,
     StopSerializer,
     UserSerializer,
     LoginSerializer,
+    DutyStatusChangeSerializer,
+    DutyStatusChangeCreateSerializer,
 )
 import requests
 import json
@@ -20,6 +23,7 @@ from datetime import datetime, timedelta
 import logging
 from django.db.models import Q
 from rest_framework import serializers
+from django.utils import timezone
 
 logger = logging.getLogger(__name__)
 
@@ -173,7 +177,7 @@ class TripViewSet(viewsets.ModelViewSet):
             trip.save()
 
             # Create stops based on locations
-            current_time = datetime.now()
+            current_time = timezone.now()
             current_cycle_hours = trip.current_cycle_hours
 
             # Create stops for each location (except current location)
@@ -399,7 +403,7 @@ class TripViewSet(viewsets.ModelViewSet):
             current_cycle_hours = trip.current_cycle_hours
             total_distance = 0
             last_stop_location = trip.current_location
-            current_time = datetime.now()
+            current_time = timezone.now()
 
             # Create stops based on legs
             for i, leg in enumerate(legs):
@@ -538,7 +542,7 @@ class TripViewSet(viewsets.ModelViewSet):
                 # Create initial driving log
                 LogSheet.objects.create(
                     trip=trip,
-                    start_time=datetime.now(),
+                    start_time=timezone.now(),
                     start_location=trip.current_location,
                     start_cycle_hours=trip.current_cycle_hours,
                     status="active"
@@ -598,7 +602,7 @@ class TripViewSet(viewsets.ModelViewSet):
                 active_log = trip.log_sheets.filter(status="active").first()
                 if active_log:
                     # Update the active log with end time and location
-                    active_log.end_time = datetime.now()
+                    active_log.end_time = timezone.now()
                     active_log.end_location = stop.location
                     active_log.end_cycle_hours = trip.current_cycle_hours
                     active_log.status = "completed"
@@ -606,12 +610,12 @@ class TripViewSet(viewsets.ModelViewSet):
 
                     # Create a new driving log for the next segment
                     next_stop = trip.stops.filter(
-                        sequence_number__gt=stop.sequence_number
+                        sequence__gt=stop.sequence
                     ).first()
                     if next_stop:
                         LogSheet.objects.create(
                             trip=trip,
-                            start_time=datetime.now(),
+                            start_time=timezone.now(),
                             start_location=stop.location,
                             start_cycle_hours=trip.current_cycle_hours,
                             status="active"
@@ -775,6 +779,11 @@ class LogSheetViewSet(viewsets.ModelViewSet):
     serializer_class = LogSheetSerializer
     permission_classes = [IsAuthenticated]
 
+    def get_serializer_class(self):
+        if self.action == 'create':
+            return LogSheetCreateSerializer
+        return LogSheetSerializer
+
     def get_queryset(self):
         trip_id = self.kwargs.get("trip_pk")
         if trip_id == "all":
@@ -798,7 +807,7 @@ class LogSheetViewSet(viewsets.ModelViewSet):
         # Check for overlapping logs
         overlapping_logs = LogSheet.objects.filter(
             trip=trip,
-            start_time__lte=end_time if end_time else datetime.now(),
+            start_time__lte=end_time if end_time else timezone.now(),
             end_time__gte=start_time
         ).exists()
         
@@ -818,7 +827,7 @@ class LogSheetViewSet(viewsets.ModelViewSet):
         # Check for overlapping logs, excluding the current log
         overlapping_logs = LogSheet.objects.filter(
             trip=self.get_object().trip,
-            start_time__lte=end_time if end_time else datetime.now(),
+            start_time__lte=end_time if end_time else timezone.now(),
             end_time__gte=start_time
         ).exclude(id=self.get_object().id).exists()
         
@@ -826,6 +835,17 @@ class LogSheetViewSet(viewsets.ModelViewSet):
             raise serializers.ValidationError("This log overlaps with an existing log")
             
         serializer.save()
+
+    @action(detail=True, methods=['post'])
+    def duty_status_change(self, request, pk=None):
+        log_sheet = self.get_object()
+        serializer = DutyStatusChangeCreateSerializer(data=request.data)
+        
+        if serializer.is_valid():
+            duty_status_change = serializer.save(log_sheet=log_sheet)
+            return Response(DutyStatusChangeSerializer(duty_status_change).data)
+        print(serializer.errors)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 
 class StopViewSet(viewsets.ModelViewSet):

@@ -21,7 +21,7 @@ const DailyLogViewer = () => {
   const navigate = useNavigate();
   const { date } = useParams<{ date: string }>();
   const { logSheets, loading, error } = useSelector((state: RootState) => state.logs);
-
+  console.log(logSheets);
   useEffect(() => {
     dispatch(fetchLogSheets("all"))
       .unwrap()
@@ -85,102 +85,14 @@ const DailyLogViewer = () => {
       ) : (
         <div className="grid gap-6">
           <DailyLogGrid
-                date={{
-                  month: "04",
-                  day: "09",
-                  year: "2021",
-                }}
-                totalMilesDriving={350}
-                vehicleNumbers="123, 20544"
-                carrierName="John Doe's Transportation"
-                carrierAddress="Washington, D.C."
-                driverName="John E. Doe"
-                remarks={[
-                  { time: "04:00", location: "Richmond, VA" },
-                  { time: "07:00", location: "Fredericksburg, VA" },
-                  { time: "10:00", location: "Baltimore, MD" },
-                  { time: "13:00", location: "Philadelphia, PA" },
-                  { time: "16:00", location: "Cherry Hill, NJ" },
-                  { time: "19:00", location: "Newark, NJ" },
-                ]}
-                dutyStatusChanges={[
-                  { time: "00:00", status: "offDuty", location: "Start" },
-                  { time: "04:00", status: "driving", location: "Richmond" },
-                  { time: "06:00", status: "onDuty", location: "Break" },
-                  { time: "07:00", status: "driving", location: "Resume" },
-                  { time: "10:00", status: "onDuty", location: "Baltimore" },
-                  { time: "11:00", status: "driving", location: "Resume" },
-                  {
-                    time: "13:00",
-                    status: "sleeper",
-                    location: "Philadelphia",
-                  },
-                  { time: "15:00", status: "driving", location: "Resume" },
-                  { time: "17:00", status: "onDuty", location: "Break" },
-                  { time: "18:00", status: "driving", location: "Resume" },
-                  { time: "20:00", status: "offDuty", location: "End" },
-                ]}
-              />
-          {dailyLogs.map((log) => (
-            <div key={log.id}>
-                <div className="flex justify-between items-center">
-                  
-                  <Badge
-                    variant="outline"
-                    className={
-                      log.status === 'active'
-                        ? 'bg-green-50 text-green-700'
-                        : log.status === 'completed'
-                        ? 'bg-yellow-50 text-yellow-700'
-                        : 'bg-gray-50 text-gray-700'
-                    }
-                  >
-                    {log.status}
-                  </Badge>
-                </div>
-              
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <p className="text-sm font-medium text-gray-500">Start Time</p>
-                    <p className="mt-1">
-                      {format(parseISO(log.start_time), 'h:mm a')}
-                    </p>
-                  </div>
-                  <div>
-                    <p className="text-sm font-medium text-gray-500">End Time</p>
-                    <p className="mt-1">
-                      {log.end_time
-                        ? format(parseISO(log.end_time), 'h:mm a')
-                        : 'In Progress'}
-                    </p>
-                  </div>
-                  <div>
-                    <p className="text-sm font-medium text-gray-500">
-                      Start Cycle Hours
-                    </p>
-                    <p className="mt-1">{log.start_cycle_hours}</p>
-                  </div>
-                  <div>
-                    <p className="text-sm font-medium text-gray-500">
-                      End Cycle Hours
-                    </p>
-                    <p className="mt-1">
-                      {log.end_cycle_hours || 'Not completed'}
-                    </p>
-                  </div>
-                </div>
-                {log.trip && (
-                  <div className="mt-4">
-                    <Link
-                      to={`/trip/${log.trip}/log-sheet/${log.id}`}
-                      className="text-primary-600 hover:text-primary-700 font-medium"
-                    >
-                      View Details →
-                    </Link>
-                  </div>
-                )}
-              </div>
-          ))}
+            date={{
+              month: format(parseISO(date || ''), 'MM'),
+              day: format(parseISO(date || ''), 'dd'), 
+              year: format(parseISO(date || ''), 'yyyy')
+            }}
+            logs={dailyLogs}
+            dutyStatusChanges={dailyLogs.map((log) => log.duty_status_changes).flat()}
+          />
         </div>
       )}
     </div>

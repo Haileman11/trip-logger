@@ -463,7 +463,7 @@ const TripDetails = () => {
               </div>
             </div>
           ))}
-          {(!trip?.logs || trip.logs.length === 0) && (
+          {(!trip?.log_sheets || trip.log_sheets.length === 0) && (
             <div className="text-center text-gray-500 py-4">
               No logs available for this trip
             </div>

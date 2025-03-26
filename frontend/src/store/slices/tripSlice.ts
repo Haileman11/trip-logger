@@ -1,6 +1,6 @@
 import { createSlice, createAsyncThunk } from "@reduxjs/toolkit";
 import { RootState } from "../../store";
-import { Trip, Location, Stop, LocationInputModel, LogSheet } from "../../types";
+import { Trip, Location, Stop, LocationInputModel, LogSheet, DutyStatusChange } from "../../types";
 import { apiRequest } from "../../utils/api";
 
 const API_BASE_URL = "http://localhost:8000";
@@ -249,6 +249,21 @@ export const createLog = createAsyncThunk(
   }
 );
 
+export const createDutyStatusChange = createAsyncThunk(
+  'trips/createDutyStatusChange',
+  async ({ logSheetId, status, location }: { logSheetId: string; status: string; location: Location }) => {
+    const response = await apiRequest<DutyStatusChange>(`/api/log-sheets/${logSheetId}/duty_status_change/`, {
+      method: 'POST',
+      body: JSON.stringify({
+        time: new Date().toISOString(),
+        status,
+        location
+      }),
+    });
+    return response.data;
+  }
+);
+
 const tripSlice = createSlice({
   name: "trip",
   initialState,
@@ -400,12 +415,32 @@ const tripSlice = createSlice({
       .addCase(createLog.fulfilled, (state, action) => {
         state.loading = false;
         if (state.currentTrip) {
-          state.currentTrip.logs = [...(state.currentTrip.logs || []), action.payload];
+          state.currentTrip.log_sheets = [...(state.currentTrip.log_sheets || []), action.payload];
         }
       })
       .addCase(createLog.rejected, (state, action) => {
         state.loading = false;
         state.error = action.error.message || 'Failed to create log';
+      })
+      .addCase(createDutyStatusChange.pending, (state) => {
+        state.loading = true;
+        state.error = null;
+      })
+      .addCase(createDutyStatusChange.fulfilled, (state, action) => {
+        state.loading = false;
+        if (state.currentTrip?.log_sheets) {
+          // Find the log sheet and add the duty status change
+          const logSheet = state.currentTrip.log_sheets.find(
+            log => log.id === action.payload.log_sheet
+          );
+          if (logSheet) {
+            logSheet.duty_status_changes.push(action.payload);
+          }
+        }
+      })
+      .addCase(createDutyStatusChange.rejected, (state, action) => {
+        state.loading = false;
+        state.error = action.error.message || 'Failed to create duty status change';
       });
   },
 });

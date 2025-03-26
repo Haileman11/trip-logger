@@ -10,7 +10,7 @@ import {
   createStop,
   deleteStop,
   updateLocation,
-  createLog
+  createDutyStatusChange
 } from '../store/slices/tripSlice';
 import { RootState, AppDispatch } from '../store';
 import TripMap from '../components/TripMap';
@@ -20,7 +20,7 @@ import { Location, LogSheet, Stop, Trip } from '../types';
 import { FaTruck, FaBed, FaTimes } from 'react-icons/fa';
 import { MdLocationOn } from 'react-icons/md';
 
-type DutyStatus = 'driving' | 'on_duty' | 'sleeper_berth' | 'off_duty';
+type DutyStatus = 'driving' | 'onDuty' | 'sleeper' | 'offDuty';
 type TripStatus = 'not_started' | 'in_progress' | 'completed';
 
 interface StatusLog {
@@ -35,7 +35,7 @@ const TripExecution: React.FC = () => {
   const [trip, setTrip] = useState<Trip | undefined>(undefined);
   const {loading, error} = useSelector((state: RootState) => state.trips);
   const [currentLocation, setCurrentLocation] = useState<Location | undefined>(undefined);
-  const [currentStatus, setCurrentStatus] = useState<DutyStatus>('off_duty');
+  const [currentStatus, setCurrentStatus] = useState<DutyStatus>('offDuty');
   const [tripStatus, setTripStatus] = useState<TripStatus>('not_started');
   const [drivingHours, setDrivingHours] = useState(0);
   const [onDutyHours, setOnDutyHours] = useState(0);
@@ -139,7 +139,7 @@ const TripExecution: React.FC = () => {
               
               // If within range and status is driving, change to on_duty
               if (isWithinRange && currentStatus === 'driving') {
-                handleStatusChange('on_duty');
+                handleStatusChange('onDuty');
               }
             }
           }
@@ -156,7 +156,7 @@ const TripExecution: React.FC = () => {
       if (currentStatus === 'driving') {
         setDrivingHours(prev => prev + 1/3600);
         setOnDutyHours(prev => prev + 1/3600);
-      } else if (currentStatus === 'on_duty') {
+      } else if (currentStatus === 'onDuty') {
         setOnDutyHours(prev => prev + 1/3600);
       }
     }, 1000);
@@ -183,14 +183,24 @@ const TripExecution: React.FC = () => {
 
     // Save the status change to the backend
     try {
-      await dispatch(createLog({
-        tripId: tripId!,
-        logData: {
-          status,
-          start_time: new Date().toISOString(),
-          start_location: currentLocation || trip?.current_location,
-          start_cycle_hours: drivingHours
-        }
+      // Find the active log sheet
+      const activeLog = trip?.log_sheets.find(log => log.status === 'active');
+      if (!activeLog) {
+        console.error('No active log sheet found');
+        return;
+      }
+
+      // Ensure we have a valid location
+      const location = currentLocation || trip?.current_location;
+      if (!location) {
+        console.error('No valid location found');
+        return;
+      }
+
+      await dispatch(createDutyStatusChange({
+        logSheetId: activeLog.id,
+        status,
+        location
       })).unwrap();
     } catch (error) {
       console.error('Failed to save status change:', error);
@@ -212,7 +222,7 @@ const TripExecution: React.FC = () => {
       })).unwrap();
       
       // Set status to on_duty when confirming arrival
-      handleStatusChange('on_duty');
+      handleStatusChange('onDuty');
       
       // Fetch updated trip data
       await dispatch(fetchTrip(tripId)).unwrap();
@@ -494,15 +504,15 @@ const TripExecution: React.FC = () => {
             maxOnDutyHours={14}
             buttonStyles={{
               driving: "bg-green-600 hover:bg-green-700",
-              on_duty: "bg-yellow-600 hover:bg-yellow-700",
-              sleeper_berth: "bg-blue-600 hover:bg-blue-700",
-              off_duty: "bg-gray-600 hover:bg-gray-700"
+              onDuty: "bg-yellow-600 hover:bg-yellow-700",
+              sleeper: "bg-blue-600 hover:bg-blue-700",
+              offDuty: "bg-gray-600 hover:bg-gray-700"
             }}
             buttonIcons={{
               driving: <FaTruck className="w-5 h-5" />,
-              on_duty: <MdLocationOn className="w-5 h-5" />,
-              sleeper_berth: <FaBed className="w-5 h-5" />,
-              off_duty: <FaTimes className="w-5 h-5" />
+              onDuty: <MdLocationOn className="w-5 h-5" />,
+              sleeper: <FaBed className="w-5 h-5" />,
+              offDuty: <FaTimes className="w-5 h-5" />
             }}
           />
         </div>
@@ -519,8 +529,8 @@ const TripExecution: React.FC = () => {
               <div className="flex items-center space-x-2">
                 <span className={`px-2 py-1 rounded text-sm ${
                   log.status === 'driving' ? 'bg-green-100 text-green-800' :
-                  log.status === 'on_duty' ? 'bg-yellow-100 text-yellow-800' :
-                  log.status === 'sleeper_berth' ? 'bg-blue-100 text-blue-800' :
+                  log.status === 'onDuty' ? 'bg-yellow-100 text-yellow-800' :
+                  log.status === 'sleeper' ? 'bg-blue-100 text-blue-800' :
                   'bg-gray-100 text-gray-800'
                 }`}>
                   {log.status.toUpperCase()}
@@ -559,7 +569,7 @@ const TripExecution: React.FC = () => {
               </div>
             </div>
           ))}
-          {(!trip?.logs || trip.logs.length === 0) && (
+          {(!trip?.log_sheets || trip.log_sheets.length === 0) && (
             <div className="text-center text-gray-500 py-4">
               No logs available for this trip
             </div>

@@ -10,7 +10,6 @@ import { store } from "./store";
 import Navigation from "./components/Navigation";
 // import TripDetails from "./components/TripDetails";
 import TripDetails from "./pages/TripDetails";
-import LogSheet from "./pages/LogSheet";
 import LogViewer from "./pages/LogViewer";
 import TripPlanner from "./pages/TripPlanner";
 
@@ -37,8 +36,6 @@ const AppContent: React.FC = () => {
           <Route path="/trip/new" element={<TripPlanner />} />
           <Route path="/trip/:tripId" element={<TripDetails />} />
           <Route path="/trip/:tripId/log-sheets" element={<LogViewer />} />
-          <Route path="/trip/:tripId/log-sheet/:id" element={<LogSheet />} />
-          <Route path="/trip/:tripId/log-sheet/new" element={<LogSheet />} />
           <Route path="/trip/:tripId/live" element={<TripExecution />} />
           <Route path="/logs" element={<LogsList />} />
           <Route path="/logs/:date" element={<DailyLogViewer />} />

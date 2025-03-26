@@ -16,12 +16,23 @@ export interface Stop {
   location: Location;
   sequence: number;
   summary: string;
-  status: "pending" | "completed" | "skipped";
+  status: "pending" | "in_progress" | "completed" | "skipped";
   stop_type: "pickup" | "dropoff" | "rest" | "fuel";
   arrival_time: string;
   duration_minutes: number;
   cycle_hours_at_stop: number;
   distance_from_last_stop: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface DutyStatusChange {
+  id: string;
+  log_sheet: string;
+  time: string;
+  status: "offDuty" | "sleeper" | "driving" | "onDuty";
+  location: Location;
+  label?: string;
   created_at: string;
   updated_at: string;
 }
@@ -36,6 +47,13 @@ export interface LogSheet {
   start_cycle_hours: number;
   end_cycle_hours?: number;
   status: "active" | "completed";
+  total_miles_driving: number;
+  vehicle_numbers: string;
+  carrier_name: string;
+  carrier_address: string;
+  driver_name: string;
+  remarks: Array<{ time: string; location: string }>;
+  duty_status_changes: DutyStatusChange[];
   created_at: string;
   updated_at: string;
 }
@@ -78,7 +96,7 @@ export interface Trip {
   status: "planned" | "in_progress" | "completed";
   route?: Route;
   stops: Stop[];
-  logs?: LogSheet[];
+  
   log_sheets: LogSheet[];
   created_at: string;
   updated_at: string;

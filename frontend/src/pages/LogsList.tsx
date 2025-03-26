@@ -15,14 +15,16 @@ import { Badge } from "@/components/ui/badge";
 import { Search, Eye } from "lucide-react";
 import { format, parseISO, isAfter, isBefore, isEqual } from "date-fns";
 import { useNavigate } from "react-router-dom";
-import { LogSheet } from "../types";
+import { LogSheet, DutyStatusChange } from "../types";
 import { fetchLogSheets } from "../store/slices/logSlice";
+import DailyLogGrid from "../components/DailyLogGrid";
 
 interface DailyLogSummary {
   date: string;
   totalActiveHours: number;
   totalCompletedHours: number;
   logs: LogSheet[];
+  dutyStatusChanges: DutyStatusChange[];
 }
 
 export default function LogsList() {
@@ -30,10 +32,10 @@ export default function LogsList() {
   const navigate = useNavigate();
   const [searchQuery, setSearchQuery] = useState("");
   const [dailyLogs, setDailyLogs] = useState<DailyLogSummary[]>([]);
+  const [selectedDate, setSelectedDate] = useState<string | null>(null);
   const { logSheets = [], loading, error } = useSelector((state: RootState) => state.logs);
 
   useEffect(() => {
-    // Fetch all logs for the current user
     dispatch(fetchLogSheets("all"));
   }, [dispatch]);
 
@@ -47,6 +49,7 @@ export default function LogsList() {
           totalActiveHours: 0,
           totalCompletedHours: 0,
           logs: [],
+          dutyStatusChanges: [],
         };
       }
 
@@ -62,6 +65,7 @@ export default function LogsList() {
       }
 
       acc[date].logs.push(log);
+      acc[date].dutyStatusChanges.push(...log.duty_status_changes);
       return acc;
     }, {});
 
@@ -89,6 +93,10 @@ export default function LogsList() {
     return `${wholeHours}h ${minutes}m`;
   };
 
+  const handleViewLog = (date: string) => {
+    setSelectedDate(date);
+  };
+
   if (loading) {
     return (
       <div className="flex justify-center items-center min-h-[calc(100vh-4rem)]">
@@ -103,6 +111,35 @@ export default function LogsList() {
         <div className="bg-red-50 border border-red-200 text-red-600 px-4 py-3 rounded-md">
           {error}
         </div>
+      </div>
+    );
+  }
+
+  if (selectedDate) {
+    const selectedLog = dailyLogs.find(log => log.date === selectedDate);
+    if (!selectedLog) return null;
+    console.log(selectedLog);
+    const date = parseISO(selectedLog.date);
+    return (
+      <div className="container mx-auto py-10">
+        <div className="flex justify-between items-center mb-6">
+          <h1 className="text-3xl font-bold">Daily Log</h1>
+          <Button
+            variant="outline"
+            onClick={() => setSelectedDate(null)}
+          >
+            Back to List
+          </Button>
+        </div>
+        <DailyLogGrid
+          date={{
+            month: format(date, "MM"),
+            day: format(date, "dd"),
+            year: format(date, "yyyy"),
+          }}
+          logs={selectedLog.logs}
+          dutyStatusChanges={selectedLog.dutyStatusChanges}
+        />
       </div>
     );
   }
@@ -171,7 +208,7 @@ export default function LogsList() {
                     <Button
                       variant="ghost"
                       size="icon"
-                      onClick={() => navigate(`/logs/${dailyLog.date}`)}
+                      onClick={() => handleViewLog(dailyLog.date)}
                     >
                       <Eye className="h-4 w-4" />
                     </Button>

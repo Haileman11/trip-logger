@@ -12,15 +12,7 @@ import {
   Scatter,
   Legend
 } from 'recharts';
-
-type DutyStatus = 'offDuty' | 'sleeper' | 'driving' | 'onDuty';
-
-interface DutyStatusChange {
-  time: string;
-  status: DutyStatus;
-  location: string;
-  label?: string;
-}
+import { LogSheet, DutyStatusChange } from '../types';
 
 interface DailyLogGridProps {
   date: {
@@ -28,17 +20,8 @@ interface DailyLogGridProps {
     day: string;
     year: string;
   };
-  totalMilesDriving: number;
-  vehicleNumbers: string;
-  carrierName: string;
-  carrierAddress: string;
-  driverName: string;
-  remarks: { time: string; location: string }[];
+  logs: LogSheet[];
   dutyStatusChanges: DutyStatusChange[];
-}
-
-interface StatusLabels {
-  [key: number]: string;
 }
 
 const GridContainer = styled.div`
@@ -147,7 +130,6 @@ const ChartContainer = styled.div`
   padding: 20px;
   background-color: #fff;
   display: flex;
-  /* gap: 20px; */
 `;
 
 const ChartWrapper = styled.div`
@@ -159,8 +141,6 @@ const StatusSummary = styled.div`
   width: 75px;
   height: 60%;
   margin: 20px 0;
-  /* padding: 0 10px; */
-  /* border-left: 1px solid #000; */
   display: flex;
   flex-direction: column;
   justify-content: space-between;
@@ -253,12 +233,7 @@ const RemarksSection = styled.div`
 
 const DailyLogGrid: React.FC<DailyLogGridProps> = ({
   date,
-  totalMilesDriving,
-  vehicleNumbers,
-  carrierName,
-  carrierAddress,
-  driverName,
-  remarks,
+  logs,
   dutyStatusChanges,
 }) => {
   const statusMap = {
@@ -266,9 +241,10 @@ const DailyLogGrid: React.FC<DailyLogGridProps> = ({
     sleeper: 3,    // Second
     driving: 2,    // Third
     onDuty: 1,     // Bottom
+    null: 0,
   };
 
-  const statusLabels: StatusLabels = {
+  const statusLabels: Record<number, string> = {
     4: 'Off Duty',
     3: 'Sleeper Berth',
     2: 'Driving',
@@ -280,7 +256,6 @@ const DailyLogGrid: React.FC<DailyLogGridProps> = ({
     if (hour === 0) return 'Midnight';
     if (hour === 12) return 'Noon';
     if (hour === 24) return 'Midnight';
-    // if (hour > 12) return `${hour - 12} PM`;
     return `${hour}`;
   };
 
@@ -319,22 +294,46 @@ const DailyLogGrid: React.FC<DailyLogGridProps> = ({
   const processDataForChart = () => {
     const timePoints = generateTimePoints();
     
-    const sortedChanges = [...dutyStatusChanges].sort((a, b) => {
-      const [hoursA] = a.time.split(':').map(Number);
-      const [hoursB] = b.time.split(':').map(Number);
-      return hoursA - hoursB;
+    // Filter out any invalid duty status changes
+    const validChanges = dutyStatusChanges.filter(change => 
+      change && change.time && change.status
+    );
+    
+    const sortedChanges = [...validChanges].sort((a, b) => {
+      const timeA = new Date(a.time);
+      const timeB = new Date(b.time);
+      return timeA.getTime() - timeB.getTime();
     });
 
+    // Initialize all time points with the first status (or default to sleeper)
+    const defaultStatus = sortedChanges[0]?.status || 'null';
+    timePoints.forEach(point => {
+      point.status = statusMap[defaultStatus];
+    });
+
+    // Apply status changes to time points
     sortedChanges.forEach(change => {
-      const [hours] = change.time.split(':').map(Number);
-      timePoints[hours].status = statusMap[change.status];
+      try {
+        const changeTime = new Date(change.time);
+        const hour = changeTime.getHours();
+        if (hour >= 0 && hour < 24) {
+          timePoints[hour].status = statusMap[change.status];
+        }
+      } catch (error) {
+        console.error('Error processing duty status change:', error);
+      }
     });
 
     return timePoints;
   };
 
   const processRemarksData = () => {
-    return remarks.map(remark => ({
+    const allRemarks = logs.flatMap(log => 
+      (log.remarks || []).filter(remark => 
+        remark && remark.time && remark.location
+      )
+    );
+    return allRemarks.map(remark => ({
       time: getTimeLabel(parseInt(remark.time.split(':')[0])),
       remark: 1,
       location: remark.location
@@ -343,6 +342,10 @@ const DailyLogGrid: React.FC<DailyLogGridProps> = ({
 
   const data = processDataForChart();
   const statusHours = calculateStatusHours(data);
+
+  // Get the first log's carrier and driver info
+  const firstLog = logs[0];
+  const totalMiles = logs.reduce((sum, log) => sum + log.total_miles_driving, 0);
 
   return (
     <GridContainer>
@@ -355,34 +358,34 @@ const DailyLogGrid: React.FC<DailyLogGridProps> = ({
         <HeaderSection>
           <div className="title">DATE</div>
           <DateSection>
-          <div>
+            <div>
               <div className="date-label">Month</div>
               <div className="date-value">{date.month}</div>
-          </div>
+            </div>
             <div className="date-separator">/</div>
-          <div>
+            <div>
               <div className="date-label">Day</div>
               <div className="date-value">{date.day}</div>
-          </div>
+            </div>
             <div className="date-separator">/</div>
             <div>
               <div className="date-label">Year</div>
               <div className="date-value">{date.year}</div>
-        </div>
+            </div>
           </DateSection>
           <div className="title">TOTAL MILES DRIVING TODAY</div>
-          <div className="miles">{totalMilesDriving}</div>
+          <div className="miles">{totalMiles}</div>
         </HeaderSection>
         <HeaderSection>
           <div className="title">VEHICLE NUMBERS—(SHOW EACH UNIT)</div>
-          <div className="content">{vehicleNumbers}</div>
+          <div className="content">{firstLog?.vehicle_numbers || ''}</div>
         </HeaderSection>
       </Header>
 
       <CarrierInfo>
-        <div className="carrier-name">{carrierName}</div>
-        <div className="carrier-address">{carrierAddress}</div>
-        <div className="driver-name">{driverName}</div>
+        <div className="carrier-name">{firstLog?.carrier_name || ''}</div>
+        <div className="carrier-address">{firstLog?.carrier_address || ''}</div>
+        <div className="driver-name">{firstLog?.driver_name || ''}</div>
       </CarrierInfo>
 
       <ChartContainer>
@@ -403,7 +406,7 @@ const DailyLogGrid: React.FC<DailyLogGridProps> = ({
                       dy={16}
                       textAnchor="end"
                       fill="#666"
-                       transform="rotate(-45)"
+                      transform="rotate(-45)"
                     >
                       {props.payload.value}
                     </text>
@@ -432,21 +435,21 @@ const DailyLogGrid: React.FC<DailyLogGridProps> = ({
         </ChartWrapper>
         <StatusSummary>
           <div className="status-item">
-            
+            <span className="status-name">Off Duty</span>
             <span className="status-hours">{statusHours.offDuty} hrs</span>
           </div>
           <div className="status-item">
-            
+            <span className="status-name">Sleeper Berth</span>
             <span className="status-hours">{statusHours.sleeper} hrs</span>
           </div>
           <div className="status-item">
-                        <span className="status-hours">{statusHours.driving} hrs</span>
+            <span className="status-name">Driving</span>
+            <span className="status-hours">{statusHours.driving} hrs</span>
           </div>
           <div className="status-item">
-            
+            <span className="status-name">On Duty</span>
             <span className="status-hours">{statusHours.onDuty} hrs</span>
           </div>
-          
         </StatusSummary>
       </ChartContainer>
 
@@ -470,14 +473,14 @@ const DailyLogGrid: React.FC<DailyLogGridProps> = ({
             </ComposedChart>
           </ResponsiveContainer>
         </RemarksChartContainer>
-        <div className="remarks-grid">
-          {remarks.map((remark, index) => (
+        {/* <div className="remarks-grid">
+          {logs.flatMap(log => log.remarks).map((remark, index) => (
             <div key={index} className="remark-entry">
-              <span className="time">{remark.time}</span>
+              <span className="time">{remark. time}</span>
               <span className="location">{remark.location}</span>
             </div>
           ))}
-      </div>
+        </div> */}
       </RemarksSection>
     </GridContainer>
   );

@@ -2,8 +2,6 @@ from django.db import models
 from django.contrib.auth.models import AbstractUser
 from django.utils.translation import gettext_lazy as _
 
-# Create your models here.
-
 class User(AbstractUser):
     email = models.EmailField(_('email address'), unique=True)
     first_name = models.CharField(_('first name'), max_length=30)
@@ -37,27 +35,33 @@ class User(AbstractUser):
         return self.email
 
 class Location(models.Model):
-    street_name = models.CharField(max_length=255, default="Unknown Location")
     latitude = models.FloatField()
     longitude = models.FloatField()
+    street_name = models.CharField(max_length=255, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
     def __str__(self):
-        return f"{self.street_name} ({self.latitude}, {self.longitude})"
+        return f"{self.street_name or f'Location at {self.latitude}, {self.longitude}'}"
 
     class Meta:
         unique_together = ('latitude', 'longitude')
 
 class Trip(models.Model):
-    created_by = models.ForeignKey(User, on_delete=models.CASCADE, related_name='trips', null=True)
-    current_location = models.ForeignKey(Location, on_delete=models.SET_NULL, null=True, related_name='trips_as_current')
-    pickup_location = models.ForeignKey(Location, on_delete=models.SET_NULL, null=True, related_name='trips_as_pickup')
-    dropoff_location = models.ForeignKey(Location, on_delete=models.SET_NULL, null=True, related_name='trips_as_dropoff')
-    fuel_stop = models.ForeignKey(Location, on_delete=models.SET_NULL, null=True, related_name='trips_as_fuel_stop')
+    STATUS_CHOICES = [
+        ("planned", "Planned"),
+        ("in_progress", "In Progress"),
+        ("completed", "Completed"),
+    ]
+
+    created_by = models.ForeignKey(User, on_delete=models.CASCADE)
+    current_location = models.ForeignKey(Location, on_delete=models.CASCADE, related_name="current_trips")
+    pickup_location = models.ForeignKey(Location, on_delete=models.CASCADE, related_name="pickup_trips")
+    dropoff_location = models.ForeignKey(Location, on_delete=models.CASCADE, related_name="dropoff_trips")
+    fuel_stop = models.ForeignKey(Location, on_delete=models.SET_NULL, null=True, blank=True, related_name="fuel_stop_trips")
     current_cycle_hours = models.FloatField()
-    status = models.CharField(max_length=20, default='pending')
-    route = models.JSONField(null=True, blank=True)  # Store OSRM route data
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default="planned")
+    route = models.JSONField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -65,44 +69,98 @@ class Trip(models.Model):
         return f"Trip {self.id} - {self.status}"
 
 class Stop(models.Model):
-    STOP_TYPES = [
-        ('pickup', 'Pickup'),
-        ('dropoff', 'Dropoff'),
-        ('rest', 'Rest Stop'),
-        ('fuel', 'Fuel Stop'),
+    STATUS_CHOICES = [
+        ("pending", "Pending"),
+        ("in_progress", "In Progress"),
+        ("completed", "Completed"),
+        ("skipped", "Skipped"),
     ]
 
-    trip = models.ForeignKey(Trip, related_name='stops', on_delete=models.CASCADE)
-    location = models.ForeignKey(Location, on_delete=models.CASCADE, related_name='stops')
+    STOP_TYPE_CHOICES = [
+        ("pickup", "Pickup"),
+        ("dropoff", "Dropoff"),
+        ("fuel", "Fuel"),
+        ("rest", "Rest"),
+    ]
+
+    trip = models.ForeignKey(Trip, on_delete=models.CASCADE, related_name="stops")
+    location = models.ForeignKey(Location, on_delete=models.CASCADE)
     sequence = models.IntegerField()
-    arrival_time = models.DateTimeField(null=True, blank=True)
-    departure_time = models.DateTimeField(null=True, blank=True)
-    status = models.CharField(max_length=20, default='pending')
-    stop_type = models.CharField(max_length=10, choices=STOP_TYPES, default='pickup')
-    duration_minutes = models.IntegerField(default=0)  # Duration of the stop
-    cycle_hours_at_stop = models.FloatField(null=True, blank=True)  # Hours in cycle when arriving at stop
-    distance_from_last_stop = models.FloatField(null=True, blank=True)  # Distance in miles from previous stop
-    summary = models.TextField(null=True, blank=True)  # Summary of the leg
+    summary = models.TextField(blank=True)
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default="pending")
+    stop_type = models.CharField(max_length=20, choices=STOP_TYPE_CHOICES)
+    arrival_time = models.DateTimeField()
+    duration_minutes = models.IntegerField()
+    cycle_hours_at_stop = models.FloatField()
+    distance_from_last_stop = models.FloatField(default=0)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    def __str__(self):
+        return f"{self.stop_type} Stop {self.sequence} - {self.status}"
+
+class DutyStatusChange(models.Model):
+    STATUS_CHOICES = [
+        ("offDuty", "Off Duty"),
+        ("sleeper", "Sleeper Berth"),
+        ("driving", "Driving"),
+        ("onDuty", "On Duty (Not Driving)"),
+    ]
+
+    log_sheet = models.ForeignKey('LogSheet', on_delete=models.CASCADE, related_name='duty_status_changes')
+    time = models.DateTimeField()
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES)
+    location = models.ForeignKey(Location, on_delete=models.CASCADE)
+    label = models.CharField(max_length=255, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
-        ordering = ['sequence']
+        ordering = ['time']
 
     def __str__(self):
-        return f"{self.get_stop_type_display()} {self.sequence} - Trip {self.trip.id}"
+        return f"{self.status} at {self.time}"
 
 class LogSheet(models.Model):
-    trip = models.ForeignKey(Trip, related_name='log_sheets', on_delete=models.CASCADE)
+    STATUS_CHOICES = [
+        ("active", "Active"),
+        ("completed", "Completed"),
+    ]
+
+    trip = models.ForeignKey(Trip, on_delete=models.CASCADE, related_name="log_sheets")
     start_time = models.DateTimeField()
     end_time = models.DateTimeField(null=True, blank=True)
-    start_location = models.ForeignKey(Location, on_delete=models.SET_NULL, null=True, related_name='log_sheets_as_start')
-    end_location = models.ForeignKey(Location, on_delete=models.SET_NULL, null=True, related_name='log_sheets_as_end')
+    start_location = models.ForeignKey(Location, on_delete=models.CASCADE, related_name="log_start_locations")
+    end_location = models.ForeignKey(Location, on_delete=models.SET_NULL, null=True, blank=True, related_name="log_end_locations")
     start_cycle_hours = models.FloatField()
     end_cycle_hours = models.FloatField(null=True, blank=True)
-    status = models.CharField(max_length=20, default='active')
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default="active")
+    total_miles_driving = models.FloatField(default=0)
+    vehicle_numbers = models.CharField(max_length=255, blank=True)
+    carrier_name = models.CharField(max_length=255, blank=True)
+    carrier_address = models.TextField(blank=True)
+    driver_name = models.CharField(max_length=255, blank=True)
+    remarks = models.JSONField(default=list)  # List of {time: string, location: string}
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
     def __str__(self):
-        return f"Log Sheet {self.id} - Trip {self.trip.id}"
+        return f"Log Sheet {self.id} - {self.status}"
+
+    def calculate_duty_hours(self):
+        """Calculate total hours for each duty status"""
+        hours = {
+            "offDuty": 0,
+            "sleeper": 0,
+            "driving": 0,
+            "onDuty": 0,
+        }
+
+        changes = self.duty_status_changes.all().order_by('time')
+        for i in range(len(changes) - 1):
+            current = changes[i]
+            next_change = changes[i + 1]
+            duration = (next_change.time - current.time).total_seconds() / 3600  # Convert to hours
+            hours[current.status] += duration
+
+        return hours
