@@ -25,7 +25,7 @@ import L from "leaflet";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { useAppDispatch } from "@/hooks/useAppDispatch";
 import { useAppSelector } from "@/hooks/useAppSelector";
-import type { Location, RouteLeg, Trip, Stop } from "@/types";
+import type { Location, RouteLeg, Trip, Stop, LogSheet } from "@/types";
 import { BoundsUpdater } from "../components/map/BoundsUpdater";
 import { LocationMarker } from "../components/map/LocationMarker";
 import { leafletIcons } from "@/utils/leaflet-icons";
@@ -438,6 +438,38 @@ const TripDetails = () => {
             </div>
           </div>
 
+          {/* Trip Logs Section */}
+      <div className="bg-white rounded-lg shadow-lg p-4">
+        <h2 className="text-xl font-bold mb-4">Trip Logs</h2>
+        <div className="space-y-2 max-h-[300px] overflow-y-auto">
+          {trip?.log_sheets?.map((log: LogSheet) => (
+            <div key={log.id} className="flex items-center justify-between p-2 bg-gray-50 rounded">
+              <div className="flex items-center space-x-2">
+                <span className={`px-2 py-1 rounded text-sm ${
+                  log.status === 'active' ? 'bg-green-100 text-green-800' :
+                  log.status === 'completed' ? 'bg-blue-100 text-blue-800' :
+                  'bg-gray-100 text-gray-800'
+                }`}>
+                  {log.status.toUpperCase()}
+                </span>
+                <span className="text-sm text-gray-600">
+                  {new Date(log.start_time).toLocaleString()}
+                  {log.end_time && ` → ${new Date(log.end_time).toLocaleString()}`}
+                </span>
+              </div>
+              <div className="text-sm text-gray-500">
+                <span>Cycle Hours: {log.start_cycle_hours}</span>
+                {log.end_cycle_hours && ` → ${formatDurationfromMinutes(log.end_cycle_hours!*60)}`}
+              </div>
+            </div>
+          ))}
+          {(!trip?.logs || trip.logs.length === 0) && (
+            <div className="text-center text-gray-500 py-4">
+              No logs available for this trip
+            </div>
+          )}
+        </div>
+      </div>
           {/* Trip Summary */}
           <div className="bg-white rounded-lg shadow-sm p-6">
             <h2 className="text-lg font-semibold mb-4">Planned Trip Summary</h2>

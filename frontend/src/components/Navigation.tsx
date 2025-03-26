@@ -1,29 +1,42 @@
 import { FaTruck } from 'react-icons/fa';
 import { Link } from 'react-router-dom';
+import { useSelector } from 'react-redux';
+import { selectAuthUser } from '../store/slices/authSlice';
 
 const Navigation = () => {
+  const user = useSelector(selectAuthUser);
+
   return (
     <nav className="bg-white border-b">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between h-16">
-            <div className="flex items-center">
-              <Link to="/" className="flex items-center">
-                <FaTruck className="h-8 w-8 text-blue-600" />
-                <span className="ml-2 text-xl font-bold text-gray-900">TruckLogger</span>
-              </Link>
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <div className="flex justify-between h-16">
+          <div className="flex items-center">
+            <Link to="/" className="flex items-center">
+              <FaTruck className="h-8 w-8 text-blue-600" />
+              <span className="ml-2 text-xl font-bold text-gray-900">TruckLogger</span>
+            </Link>
+            {user && (
               <div className="hidden sm:ml-8 sm:flex sm:space-x-8">
-                <Link to="/features" className="text-gray-500 hover:text-gray-900 px-3 py-2 text-sm font-medium">Features</Link>
-                <Link to="/pricing" className="text-gray-500 hover:text-gray-900 px-3 py-2 text-sm font-medium">Pricing</Link>
-                <Link to="/support" className="text-gray-500 hover:text-gray-900 px-3 py-2 text-sm font-medium">Support</Link>
+                <Link to="/" className="text-gray-500 hover:text-gray-900 px-3 py-2 text-sm font-medium">Home</Link>
+                <Link to="/logs" className="text-gray-500 hover:text-gray-900 px-3 py-2 text-sm font-medium">Logs</Link>
               </div>
-            </div>
-            <div className="flex items-center">
-              <Link to="/login" className="text-gray-500 hover:text-gray-900 px-3 py-2 text-sm font-medium">Login</Link>
-              <Link to="/signup" className="ml-4 px-4 py-2 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-md">Get Started</Link>
-            </div>
+            )}
+          </div>
+          <div className="flex items-center">
+            {user ? (
+              <div className="flex items-center space-x-4">
+                <span className="text-gray-700 text-sm font-medium">{user.first_name} {user.last_name}</span>
+              </div>
+            ) : (
+              <>
+                <Link to="/login" className="text-gray-500 hover:text-gray-900 px-3 py-2 text-sm font-medium">Login</Link>
+                <Link to="/signup" className="ml-4 px-4 py-2 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-md">Get Started</Link>
+              </>
+            )}
           </div>
         </div>
-      </nav>
+      </div>
+    </nav>
     // <nav className="bg-white shadow">
     //   <div className="max-w-7xl mx-auto px-4">
     //     <div className="flex justify-between h-16">

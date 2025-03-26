@@ -10,7 +10,7 @@ interface User {
   last_name: string;
 }
 
-interface AuthState {
+export interface AuthState {
   user: User | null;
   accessToken: string | null;
   refreshToken: string | null;

@@ -1,11 +1,11 @@
 import { createSlice, createAsyncThunk } from "@reduxjs/toolkit";
 import { RootState } from "../../store";
-import { Trip, Location, Stop, LocationInputModel } from "../../types";
+import { Trip, Location, Stop, LocationInputModel, LogSheet } from "../../types";
 import { apiRequest } from "../../utils/api";
 
 const API_BASE_URL = "http://localhost:8000";
 
-interface TripState {
+export interface TripState {
   trips: Trip[];
   currentTrip: Trip | null;
   loading: boolean;
@@ -238,6 +238,17 @@ export const updateLocation = createAsyncThunk(
   }
 );
 
+export const createLog = createAsyncThunk(
+  'trips/createLog',
+  async ({ tripId, logData }: { tripId: string; logData: any }) => {
+    const response = await apiRequest<LogSheet>(`/api/trips/${tripId}/log-sheets/`, {
+      method: 'POST',
+      body: JSON.stringify(logData),
+    });
+    return response.data;
+  }
+);
+
 const tripSlice = createSlice({
   name: "trip",
   initialState,
@@ -381,6 +392,20 @@ const tripSlice = createSlice({
       .addCase(updateLocation.rejected, (state, action) => {
         state.loading = false;
         state.error = action.error.message || "Failed to update location";
+      })
+      .addCase(createLog.pending, (state) => {
+        state.loading = true;
+        state.error = null;
+      })
+      .addCase(createLog.fulfilled, (state, action) => {
+        state.loading = false;
+        if (state.currentTrip) {
+          state.currentTrip.logs = [...(state.currentTrip.logs || []), action.payload];
+        }
+      })
+      .addCase(createLog.rejected, (state, action) => {
+        state.loading = false;
+        state.error = action.error.message || 'Failed to create log';
       });
   },
 });

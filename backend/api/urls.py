@@ -2,13 +2,18 @@ from django.urls import path, include
 from rest_framework.routers import DefaultRouter
 from .views import TripViewSet, StopViewSet, LogSheetViewSet, register, login
 
-router = DefaultRouter()
-router.register(r"trips", TripViewSet, basename="trip")
-router.register(r"log-sheets", LogSheetViewSet, basename="log-sheet")
-router.register(r"stops", StopViewSet, basename="stop")
+# Create a router for nested routes
+trip_router = DefaultRouter()
+trip_router.register(r"trips", TripViewSet, basename="trip")
+trip_router.register(r"stops", StopViewSet, basename="stop")
+
+# Create a router for root routes
+root_router = DefaultRouter()
+root_router.register(r"log-sheets", LogSheetViewSet, basename="log-sheet")
 
 urlpatterns = [
-    path("", include(router.urls)),
+    path("", include(root_router.urls)),
+    path("", include(trip_router.urls)),
     path(
         "trips/<int:trip_pk>/",
         TripViewSet.as_view({"get": "list", "post": "create"}),

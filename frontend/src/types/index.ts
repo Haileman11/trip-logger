@@ -78,6 +78,7 @@ export interface Trip {
   status: "planned" | "in_progress" | "completed";
   route?: Route;
   stops: Stop[];
+  logs?: LogSheet[];
   log_sheets: LogSheet[];
   created_at: string;
   updated_at: string;

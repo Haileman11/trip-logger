@@ -9,13 +9,16 @@ import {
   planRoute,
   createStop,
   deleteStop,
-  updateLocation
+  updateLocation,
+  createLog
 } from '../store/slices/tripSlice';
 import { RootState, AppDispatch } from '../store';
 import TripMap from '../components/TripMap';
 import StopStatusUpdate from '../components/StopStatusUpdate';
 import DutyStatusControl from '../components/DutyStatusControl';
-import { Location, Stop, Trip } from '../types';
+import { Location, LogSheet, Stop, Trip } from '../types';
+import { FaTruck, FaBed, FaTimes } from 'react-icons/fa';
+import { MdLocationOn } from 'react-icons/md';
 
 type DutyStatus = 'driving' | 'on_duty' | 'sleeper_berth' | 'off_duty';
 type TripStatus = 'not_started' | 'in_progress' | 'completed';
@@ -54,6 +57,7 @@ const TripExecution: React.FC = () => {
           // Set initial trip status
           setTripStatus(result.status === 'completed' ? 'completed' : result.status === 'in_progress' ? 'in_progress' : 'not_started');
           setTrip(result);
+          setCurrentStopIndex(result.stops.findIndex(stop => stop.status !== 'completed'));
           // Plan route if trip is in planned status and has no route
           if (result.status === 'planned' && !result.route) {
             await dispatch(planRoute(parseInt(tripId))).unwrap();
@@ -85,38 +89,12 @@ const TripExecution: React.FC = () => {
   useEffect(() => {
     if (!trip) return;
 
-    // Handle real location updates
-    // const handlePosition = (position: GeolocationPosition) => {
-    //   const newLocation = {
-    //     latitude: position.coords.latitude,
-    //     longitude: position.coords.longitude,
-    //     timestamp: new Date().toISOString(),
-    //   };
-    //   handleLocationUpdate(newLocation);
-    // };
-
-    // const handleError = (error: GeolocationPositionError) => {
-    //   console.error('Geolocation error:', error);
-    // };
-
-    // const newWatchId = navigator.geolocation.watchPosition(
-    //   handlePosition,
-    //   handleError,
-    //   {
-    //     enableHighAccuracy: true,
-    //     timeout: 5000,
-    //     maximumAge: 0,
-    //   }
-    // );
-
-    // setWatchId(newWatchId);
-
     // Handle simulated location updates
-    if (tripStatus === 'in_progress') {
+    if (tripStatus === 'in_progress' && currentStatus === 'driving') {
       let currentSegmentIndex = 0;
       let progressInSegment = 0;
-      const UPDATE_INTERVAL = 1000; // Update every second
-      const MOVEMENT_SPEED = 10; // Adjusted speed for smoother movement
+      const UPDATE_INTERVAL = 100; // Update every second
+      const MOVEMENT_SPEED = 1; // Adjusted speed for smoother movement
 
       const interval = setInterval(() => {
         if (trip?.route?.routes?.[0]?.geometry?.coordinates) {
@@ -158,25 +136,19 @@ const TripExecution: React.FC = () => {
               const currentStop = trip.stops[currentStopIndex];
               const distance = calculateDistance(updatedLocation, currentStop.location);
               setIsWithinRange(distance <= 0.5); // Within 0.5 miles
+              
+              // If within range and status is driving, change to on_duty
+              if (isWithinRange && currentStatus === 'driving') {
+                handleStatusChange('on_duty');
+              }
             }
           }
         }
       }, UPDATE_INTERVAL);
 
-      // return () => {
-      //   clearInterval(interval);
-      //   if (newWatchId) {
-      //     navigator.geolocation.clearWatch(newWatchId);
-      //   }
-      // };
+      return () => clearInterval(interval);
     }
-
-    // return () => {
-    //   if (newWatchId) {
-    //     navigator.geolocation.clearWatch(newWatchId);
-    //   }
-    // };
-  }, [trip, tripStatus, currentStopIndex]);
+  }, [trip, tripStatus, currentStopIndex, currentStatus]);
 
   // Update duty hours
   useEffect(() => {
@@ -202,12 +174,27 @@ const TripExecution: React.FC = () => {
     }
   }, [isWithinRange, timeRemaining]);
 
-  const handleStatusChange = (status: DutyStatus) => {
+  const handleStatusChange = async (status: DutyStatus) => {
     setCurrentStatus(status);
     setStatusLogs(prev => [
       { status, timestamp: new Date() },
       ...prev
     ]);
+
+    // Save the status change to the backend
+    try {
+      await dispatch(createLog({
+        tripId: tripId!,
+        logData: {
+          status,
+          start_time: new Date().toISOString(),
+          start_location: currentLocation || trip?.current_location,
+          start_cycle_hours: drivingHours
+        }
+      })).unwrap();
+    } catch (error) {
+      console.error('Failed to save status change:', error);
+    }
   };
 
   const handleStopConfirmation = async () => {
@@ -216,11 +203,16 @@ const TripExecution: React.FC = () => {
     setIsUpdating(true);
     try {
       const currentStop = trip.stops[currentStopIndex];
+      
+      // Update stop status
       await dispatch(updateStopStatus({ 
         tripId, 
         stopId: currentStop.id, 
         status: 'completed' 
       })).unwrap();
+      
+      // Set status to on_duty when confirming arrival
+      handleStatusChange('on_duty');
       
       // Fetch updated trip data
       await dispatch(fetchTrip(tripId)).unwrap();
@@ -231,11 +223,10 @@ const TripExecution: React.FC = () => {
       } else {
         // Trip completed
         await dispatch(completeTrip(tripId)).unwrap();
-        navigate('/trips');
+        navigate('/dashboard');
       }
     } catch (error) {
       console.error('Failed to update stop status:', error);
-      // You might want to show an error message to the user here
     } finally {
       setIsUpdating(false);
     }
@@ -396,8 +387,9 @@ const TripExecution: React.FC = () => {
           {tripStatus === 'not_started' && (
             <button
               onClick={handleStartTrip}
-              className="bg-green-600 text-white px-6 py-2 rounded-lg hover:bg-green-700"
+              className="bg-green-600 text-white px-6 py-2 rounded-lg hover:bg-green-700 flex items-center gap-2"
             >
+              <FaTruck className="w-5 h-5" />
               Start Trip
             </button>
           )}
@@ -500,6 +492,18 @@ const TripExecution: React.FC = () => {
             maxDrivingHours={11}
             onDutyHours={onDutyHours}
             maxOnDutyHours={14}
+            buttonStyles={{
+              driving: "bg-green-600 hover:bg-green-700",
+              on_duty: "bg-yellow-600 hover:bg-yellow-700",
+              sleeper_berth: "bg-blue-600 hover:bg-blue-700",
+              off_duty: "bg-gray-600 hover:bg-gray-700"
+            }}
+            buttonIcons={{
+              driving: <FaTruck className="w-5 h-5" />,
+              on_duty: <MdLocationOn className="w-5 h-5" />,
+              sleeper_berth: <FaBed className="w-5 h-5" />,
+              off_duty: <FaTimes className="w-5 h-5" />
+            }}
           />
         </div>
 
@@ -527,6 +531,39 @@ const TripExecution: React.FC = () => {
               </span>
             </div>
           ))}
+        </div>
+      </div>
+
+      {/* Trip Logs Section */}
+      <div className="bg-white rounded-lg shadow-lg p-4">
+        <h2 className="text-xl font-bold mb-4">Trip Logs</h2>
+        <div className="space-y-2 max-h-[300px] overflow-y-auto">
+          {trip?.log_sheets?.map((log: LogSheet) => (
+            <div key={log.id} className="flex items-center justify-between p-2 bg-gray-50 rounded">
+              <div className="flex items-center space-x-2">
+                <span className={`px-2 py-1 rounded text-sm ${
+                  log.status === 'active' ? 'bg-green-100 text-green-800' :
+                  log.status === 'completed' ? 'bg-blue-100 text-blue-800' :
+                  'bg-gray-100 text-gray-800'
+                }`}>
+                  {log.status.toUpperCase()}
+                </span>
+                <span className="text-sm text-gray-600">
+                  {new Date(log.start_time).toLocaleString()}
+                  {log.end_time && ` → ${new Date(log.end_time).toLocaleString()}`}
+                </span>
+              </div>
+              <div className="text-sm text-gray-500">
+                <span>Cycle Hours: {log.start_cycle_hours}</span>
+                {log.end_cycle_hours && ` → ${log.end_cycle_hours}`}
+              </div>
+            </div>
+          ))}
+          {(!trip?.logs || trip.logs.length === 0) && (
+            <div className="text-center text-gray-500 py-4">
+              No logs available for this trip
+            </div>
+          )}
         </div>
       </div>
     </div>

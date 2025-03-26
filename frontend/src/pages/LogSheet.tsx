@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import { useDispatch, useSelector } from 'react-redux';
-import { updateLogSheet, fetchLogSheets, createLogSheet } from '../store/logSlice';
+import { updateLogSheet, fetchLogSheets, createLogSheet } from '../store/slices/logSlice';
 import type { RootState, AppDispatch } from '../store';
 
 const LogSheet = () => {
@@ -73,37 +73,37 @@ const LogSheet = () => {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!currentTrip?.id) return;
+    // if (!currentTrip?.id) return;
 
-    try {
-      if (id === 'new') {
-        // For new logs, use pickup location as start and dropoff as end
-        const logData = {
-          ...formData,
-          start_location: currentTrip.pickup_location || formData.start_location,
-          end_location: currentTrip.dropoff_location || formData.end_location,
-        };
+    // try {
+    //   if (id === 'new') {
+    //     // For new logs, use pickup location as start and dropoff as end
+    //     const logData = {
+    //       ...formData,
+    //       start_location: currentTrip.pickup_location || formData.start_location,
+    //       end_location: currentTrip.dropoff_location || formData.end_location,
+    //     };
 
-        await dispatch(createLogSheet({
-          tripId: currentTrip.id.toString(),
-          data: logData
-        })).unwrap();
-      } else if (id) {
-        const updatedData = {
-          ...formData,
-          end_time: formData.end_time ? new Date(formData.end_time).toISOString() : null,
-        };
+    //     await dispatch(createLogSheet({
+    //       tripId: currentTrip.id.toString(),
+    //       logData: logData
+    //     })).unwrap();
+    //   } else if (id) {
+    //     const updatedData = {
+    //       ...formData,
+    //       end_time: formData.end_time ? new Date(formData.end_time).toISOString() : null,
+    //     };
 
-        await dispatch(updateLogSheet({
-          tripId: currentTrip.id.toString(),
-          logId: id,
-          data: updatedData,
-        })).unwrap();
-      }
-      navigate(`/trip/${currentTrip.id}/log-sheets`);
-    } catch (err) {
-      console.error('Failed to save log sheet:', err);
-    }
+    //     await dispatch(updateLogSheet({
+    //       tripId: currentTrip.id.toString(),
+    //       logId: id,
+    //       logData: updatedData,
+    //     })).unwrap();
+    //   }
+    //   navigate(`/trip/${currentTrip.id}/log-sheets`);
+    // } catch (err) {
+    //   console.error('Failed to save log sheet:', err);
+    // }
   };
 
   if (loading) {

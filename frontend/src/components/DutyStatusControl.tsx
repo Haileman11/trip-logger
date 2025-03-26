@@ -11,6 +11,18 @@ interface DutyStatusControlProps {
   maxDrivingHours: number;
   onDutyHours: number;
   maxOnDutyHours: number;
+  buttonStyles?: {
+    driving: string;
+    on_duty: string;
+    sleeper_berth: string;
+    off_duty: string;
+  };
+  buttonIcons?: {
+    driving: React.ReactNode;
+    on_duty: React.ReactNode;
+    sleeper_berth: React.ReactNode;
+    off_duty: React.ReactNode;
+  };
 }
 
 const DutyStatusControl: React.FC<DutyStatusControlProps> = ({
@@ -19,7 +31,19 @@ const DutyStatusControl: React.FC<DutyStatusControlProps> = ({
   drivingHours,
   maxDrivingHours,
   onDutyHours,
-  maxOnDutyHours
+  maxOnDutyHours,
+  buttonStyles = {
+    driving: 'bg-green-600 hover:bg-green-300 text-white ',
+    on_duty: 'bg-yellow-600 hover:bg-yellow-300 text-white',
+    sleeper_berth: 'bg-blue-600 hover:bg-blue-300 text-white',
+    off_duty: 'bg-red-600 hover:bg-red-300 text-white'
+  },
+  buttonIcons = {
+    driving: <FaTruck className="mr-2" />,
+    on_duty: <BiTimeFive className="mr-2" />,
+    sleeper_berth: <FaBed className="mr-2" />,
+    off_duty: <BiTimeFive className="mr-2" />
+  }
 }) => {
   const isApproachingLimit = (current: number, max: number) => {
     return (current / max) > 0.8;
@@ -29,19 +53,19 @@ const DutyStatusControl: React.FC<DutyStatusControlProps> = ({
     <div className="space-y-6">
       <div>
         <h3 className="text-lg font-semibold mb-4">Duty Status</h3>
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-2 md:grid-cols-1 gap-4">
           <button
             onClick={() => onStatusChange('driving')}
             disabled={drivingHours >= maxDrivingHours}
-            className={`flex items-center justify-center p-4 rounded-lg ${
+            className={`flex items-center  justify-center gap-2 p-4 rounded-lg ${
               currentStatus === 'driving'
-                ? 'bg-blue-600 text-white'
+                ? buttonStyles.driving
                 : isApproachingLimit(drivingHours, maxDrivingHours)
                 ? 'bg-yellow-100 text-yellow-700'
-                : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                : 'bg-gray-100 border border-green-300 text-gray-700 hover:bg-gray-200'
             }`}
           >
-            <FaTruck className="mr-2" />
+            {buttonIcons.driving}
             Driving
             {isApproachingLimit(drivingHours, maxDrivingHours) && (
               <span className="ml-2 text-xs">
@@ -53,15 +77,15 @@ const DutyStatusControl: React.FC<DutyStatusControlProps> = ({
           <button
             onClick={() => onStatusChange('on_duty')}
             disabled={onDutyHours >= maxOnDutyHours}
-            className={`flex items-center justify-center p-4 rounded-lg ${
+            className={`flex items-center  justify-center gap-2 p-4 rounded-lg ${
               currentStatus === 'on_duty'
-                ? 'bg-blue-600 text-white'
+                ? buttonStyles.on_duty
                 : isApproachingLimit(onDutyHours, maxOnDutyHours)
                 ? 'bg-yellow-100 text-yellow-700'
-                : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                : 'bg-gray-100 border border-yellow-300 text-gray-700 hover:bg-gray-200'
             }`}
           >
-            <BiTimeFive className="mr-2" />
+            {buttonIcons.on_duty}
             On Duty
             {isApproachingLimit(onDutyHours, maxOnDutyHours) && (
               <span className="ml-2 text-xs">
@@ -72,48 +96,31 @@ const DutyStatusControl: React.FC<DutyStatusControlProps> = ({
 
           <button
             onClick={() => onStatusChange('sleeper_berth')}
-            className={`flex items-center justify-center p-4 rounded-lg ${
+            className={`flex items-center  justify-center gap-2 p-4 rounded-lg ${
               currentStatus === 'sleeper_berth'
-                ? 'bg-blue-600 text-white'
-                : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                ? buttonStyles.sleeper_berth
+                : 'bg-gray-100 border border-blue-300 text-gray-700 hover:bg-gray-200'
             }`}
           >
-            <FaBed className="mr-2" />
+            {buttonIcons.sleeper_berth}
             Sleeper Berth
           </button>
 
           <button
             onClick={() => onStatusChange('off_duty')}
-            className={`flex items-center justify-center p-4 rounded-lg ${
+            className={`flex items-center  justify-center gap-2 p-4 rounded-lg ${
               currentStatus === 'off_duty'
-                ? 'bg-blue-600 text-white'
-                : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                ? buttonStyles.off_duty
+                : 'bg-gray-100 border border-red-300 text-gray-700 hover:bg-gray-200'
             }`}
           >
-            <BiTimeFive className="mr-2" />
+            {buttonIcons.off_duty}
             Off Duty
           </button>
         </div>
       </div>
 
-      {/* Status Change History */}
-      <div className="mt-4">
-        <h4 className="text-sm font-medium text-gray-600 mb-2">Recent Status Changes</h4>
-        <div className="bg-gray-50 rounded-lg p-4 space-y-2">
-          <div className="flex items-center justify-between text-sm">
-            <span className="text-gray-600">Driving</span>
-            <span className="text-gray-900">2:30 PM</span>
-          </div>
-          <div className="flex items-center justify-between text-sm">
-            <span className="text-gray-600">On Duty</span>
-            <span className="text-gray-900">1:15 PM</span>
-          </div>
-          <div className="flex items-center justify-between text-sm">
-            <span className="text-gray-600">Off Duty</span>
-            <span className="text-gray-900">12:00 PM</span>
-          </div>
-        </div>
-      </div>
+      
     </div>
   );
 };

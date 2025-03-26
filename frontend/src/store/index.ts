@@ -1,13 +1,20 @@
 import { configureStore } from '@reduxjs/toolkit';
-import tripReducer from './slices/tripSlice';
-import authReducer from './slices/authSlice';
+import tripReducer, { TripState } from './slices/tripSlice';
+import authReducer, { AuthState } from './slices/authSlice';
+import logReducer, { LogState } from './slices/logSlice';
+
+export interface RootState {
+  trips: TripState;
+  auth: AuthState;
+  logs: LogState;
+}
 
 export const store = configureStore({
   reducer: {
     trips: tripReducer,
     auth: authReducer,
+    logs: logReducer,
   },
 });
 
-export type RootState = ReturnType<typeof store.getState>;
 export type AppDispatch = typeof store.dispatch; 

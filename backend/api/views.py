@@ -18,6 +18,8 @@ import requests
 import json
 from datetime import datetime, timedelta
 import logging
+from django.db.models import Q
+from rest_framework import serializers
 
 logger = logging.getLogger(__name__)
 
@@ -81,8 +83,8 @@ class TripViewSet(viewsets.ModelViewSet):
     def get_queryset(self):
         trip_id = self.kwargs.get("trip_pk")
         if trip_id:
-            return Trip.objects.filter(trip_id=trip_id)
-        return Trip.objects.all().order_by("-created_at")
+            return Trip.objects.filter(trip_id=trip_id).prefetch_related('log_sheets')
+        return Trip.objects.all().order_by("-created_at").prefetch_related('log_sheets')
 
     # def get_queryset(self):
     # return Trip.objects.filter(created_by=self.request.user)
@@ -533,6 +535,15 @@ class TripViewSet(viewsets.ModelViewSet):
                 first_stop.status = "in_progress"
                 first_stop.save()
 
+                # Create initial driving log
+                LogSheet.objects.create(
+                    trip=trip,
+                    start_time=datetime.now(),
+                    start_location=trip.current_location,
+                    start_cycle_hours=trip.current_cycle_hours,
+                    status="active"
+                )
+
             response_data = {
                 "trip": self.get_serializer(trip).data,
                 "route": trip.route,
@@ -563,7 +574,6 @@ class TripViewSet(viewsets.ModelViewSet):
                     status=status.HTTP_400_BAD_REQUEST,
                 )
 
-            # Convert stop_id to integer
             try:
                 stop_id = int(stop_id)
             except (TypeError, ValueError):
@@ -575,18 +585,48 @@ class TripViewSet(viewsets.ModelViewSet):
             stop = trip.stops.filter(id=stop_id).first()
             if not stop:
                 return Response(
-                    {"error": "Stop not found"},
-                    status=status.HTTP_404_NOT_FOUND,
+                    {"error": "Stop not found"}, status=status.HTTP_404_NOT_FOUND
                 )
 
+            # Update stop status
             stop.status = new_status
             stop.save()
 
-            # If all stops are completed, update trip status
-            if all(s.status == "completed" for s in trip.stops.all()):
+            # If completing a stop, create a log entry
+            if new_status == "completed":
+                # Find the active driving log
+                active_log = trip.log_sheets.filter(status="active").first()
+                if active_log:
+                    # Update the active log with end time and location
+                    active_log.end_time = datetime.now()
+                    active_log.end_location = stop.location
+                    active_log.end_cycle_hours = trip.current_cycle_hours
+                    active_log.status = "completed"
+                    active_log.save()
+
+                    # Create a new driving log for the next segment
+                    next_stop = trip.stops.filter(
+                        sequence_number__gt=stop.sequence_number
+                    ).first()
+                    if next_stop:
+                        LogSheet.objects.create(
+                            trip=trip,
+                            start_time=datetime.now(),
+                            start_location=stop.location,
+                            start_cycle_hours=trip.current_cycle_hours,
+                            status="active"
+                        )
+
+            # Check if all stops are completed
+            all_stops_completed = not trip.stops.filter(
+                ~Q(status="completed")
+            ).exists()
+
+            if all_stops_completed:
                 trip.status = "completed"
                 trip.save()
 
+            # Get updated trip data
             response_data = {
                 "trip": self.get_serializer(trip).data,
                 "route": trip.route,
@@ -733,16 +773,59 @@ class TripViewSet(viewsets.ModelViewSet):
 class LogSheetViewSet(viewsets.ModelViewSet):
     queryset = LogSheet.objects.all()
     serializer_class = LogSheetSerializer
+    permission_classes = [IsAuthenticated]
 
     def get_queryset(self):
         trip_id = self.kwargs.get("trip_pk")
-        if trip_id:
-            return LogSheet.objects.filter(trip_id=trip_id)
-        return LogSheet.objects.all().order_by("-created_at")
+        if trip_id == "all":
+            # Return all logs for the current user's trips
+            return LogSheet.objects.filter(trip__created_by=self.request.user).order_by("-created_at")
+        elif trip_id:
+            # Return logs for a specific trip, ensuring the user has access
+            return LogSheet.objects.filter(trip_id=trip_id, trip__created_by=self.request.user)
+        return LogSheet.objects.filter(trip__created_by=self.request.user).order_by("-created_at")
 
     def perform_create(self, serializer):
         trip = get_object_or_404(Trip, pk=self.kwargs.get("trip_pk"))
+        
+        # Validate that we're not creating overlapping logs
+        start_time = serializer.validated_data.get('start_time')
+        end_time = serializer.validated_data.get('end_time')
+        
+        if end_time and start_time > end_time:
+            raise serializers.ValidationError("Start time cannot be after end time")
+            
+        # Check for overlapping logs
+        overlapping_logs = LogSheet.objects.filter(
+            trip=trip,
+            start_time__lte=end_time if end_time else datetime.now(),
+            end_time__gte=start_time
+        ).exists()
+        
+        if overlapping_logs:
+            raise serializers.ValidationError("This log overlaps with an existing log")
+            
         serializer.save(trip=trip)
+
+    def perform_update(self, serializer):
+        # Validate that we're not creating overlapping logs
+        start_time = serializer.validated_data.get('start_time')
+        end_time = serializer.validated_data.get('end_time')
+        
+        if end_time and start_time > end_time:
+            raise serializers.ValidationError("Start time cannot be after end time")
+            
+        # Check for overlapping logs, excluding the current log
+        overlapping_logs = LogSheet.objects.filter(
+            trip=self.get_object().trip,
+            start_time__lte=end_time if end_time else datetime.now(),
+            end_time__gte=start_time
+        ).exclude(id=self.get_object().id).exists()
+        
+        if overlapping_logs:
+            raise serializers.ValidationError("This log overlaps with an existing log")
+            
+        serializer.save()
 
 
 class StopViewSet(viewsets.ModelViewSet):
