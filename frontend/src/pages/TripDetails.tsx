@@ -322,38 +322,41 @@ const TripDetails = () => {
           <div className="bg-white rounded-lg shadow-sm p-6">
             <h2 className="text-lg font-semibold mb-4">Route Timeline</h2>
             <div className="space-y-6">
-              {trip.route?.routes?.[0]?.legs.map(
-                (stop: RouteLeg, index: number) => (
+              {trip.stops.map((stop: Stop, index: number) => {
+                // Find the corresponding leg for this stop
+                const leg = trip.route?.routes?.[0]?.legs[index];
+                if (!leg) return null;
+
+                return (
                   <div key={index} className="flex items-start space-x-3">
                     <div className="flex-shrink-0">
-                      <div className="w-16 h-16 rounded-full  flex flex-col items-center justify-center text-sm font-medium text-gray-600">
-                        {createStopIcon(trip.stops[index].stop_type)}
-                        {/* {index + 1} */}
+                      <div className="w-16 h-16 rounded-full flex flex-col items-center justify-center text-sm font-medium text-gray-600">
+                        {createStopIcon(stop.stop_type)}
                       </div>
                     </div>
                     <div>
                       <p className="font-sm text-gray-900">
-                        {trip.stops[index].stop_type.toUpperCase()}
+                        {stop.stop_type.toUpperCase()}
                       </p>
                       <p className="font-medium text-gray-900">
-                        {stop.summary}
+                        {leg.summary}
                       </p>
                       <p className="font-medium text-gray-900">
                         {formatDurationfromMinutes(
-                          trip.stops[index].cycle_hours_at_stop * 60
+                          stop.cycle_hours_at_stop * 60
                         )}{" "}
                         cycle hours
                       </p>
                       <p className="font-medium text-gray-900">
-                        Arriving in {formatDuration(stop.duration)}
+                        Arriving in {formatDuration(leg.duration)}
                       </p>
                       <p className="text-sm text-gray-500">
-                        {formatDistance(stop.distance)}
+                        {formatDistance(leg.distance)}
                       </p>
                     </div>
                   </div>
-                )
-              )}
+                );
+              })}
             </div>
           </div>
 

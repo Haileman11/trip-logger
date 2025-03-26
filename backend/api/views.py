@@ -5,7 +5,7 @@ from rest_framework.decorators import action, api_view, permission_classes
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework_simplejwt.tokens import RefreshToken
 from django.contrib.auth import authenticate
-from .models import Trip, LogSheet, Stop
+from .models import Trip, LogSheet, Stop, Location
 from .serializers import (
     TripSerializer,
     TripCreateSerializer,
@@ -97,27 +97,51 @@ class TripViewSet(viewsets.ModelViewSet):
 
     def create(self, request, *args, **kwargs):
         try:
-            # Create the trip first
+            # Validate the input data
             serializer = self.get_serializer(data=request.data)
             serializer.is_valid(raise_exception=True)
-            trip = serializer.save()
+            validated_data = serializer.validated_data
+
+            # Get locations from request data
+            locations_data = validated_data['locations']
+            current_cycle_hours = validated_data['current_cycle_hours']
+
+            # Create or get locations first
+            locations = []
+            for location_data in locations_data:
+                # Try to find existing location
+                location, created = Location.objects.get_or_create(
+                    latitude=location_data['latitude'],
+                    longitude=location_data['longitude'],
+                    defaults={
+                        'street_name': location_data.get('street_name', f"Location at {location_data['latitude']}, {location_data['longitude']}")
+                    }
+                )
+                locations.append(location)
+
+            # Create trip with the locations
+            trip = Trip.objects.create(
+                current_location=locations[0],
+                pickup_location=locations[1] if len(locations) > 1 else None,
+                dropoff_location=locations[2] if len(locations) > 2 else None,
+                fuel_stop=locations[3] if len(locations) > 3 else None,
+                current_cycle_hours=current_cycle_hours,
+                created_by=request.user
+            )
+
+            # Build route coordinates from locations
+            route_coords = []
+            for location in locations:
+                coords = f"{location.longitude},{location.latitude}"
+                route_coords.append(coords)
+
+            if not route_coords:
+                return Response(
+                    {"error": "No valid coordinates found in locations"},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
 
             # Get route from OSRM
-            start_coords = f"{trip.current_location['longitude']},{trip.current_location['latitude']}"
-            pickup_coords = f"{trip.pickup_location['longitude']},{trip.pickup_location['latitude']}"
-            dropoff_coords = f"{trip.dropoff_location['longitude']},{trip.dropoff_location['latitude']}"
-
-            # Build route URL with optional fuel stop
-            route_coords = [start_coords, pickup_coords, dropoff_coords]
-
-            # Check for fuel stop in request data
-            fuel_stop = request.data.get("fuel_stop")
-            if fuel_stop and isinstance(fuel_stop, dict):
-                fuel_stop_coords = f"{fuel_stop['longitude']},{fuel_stop['latitude']}"
-                # Insert fuel stop after start location
-                route_coords.insert(1, fuel_stop_coords)
-                print(f"Added fuel stop coordinates: {fuel_stop_coords}")
-
             route_url = f"http://router.project-osrm.org/route/v1/driving/{';'.join(route_coords)}"
             params = {"overview": "full", "geometries": "geojson", "steps": "true"}
 
@@ -146,60 +170,48 @@ class TripViewSet(viewsets.ModelViewSet):
             trip.route = route_data
             trip.save()
 
-            # Create stops along the route
-            route = route_data["routes"][0]
-            legs = route["legs"]
-
-            print(f"Creating stops with {len(legs)} legs")
-
-            # Initialize variables for HOS tracking
-            current_cycle_hours = trip.current_cycle_hours
-            total_distance = 0
-            last_stop_location = trip.current_location
+            # Create stops based on locations
             current_time = datetime.now()
+            current_cycle_hours = trip.current_cycle_hours
 
-            # Create stops based on legs
-            for i, leg in enumerate(legs):
-                # Determine stop type based on sequence and fuel stop presence
-                if i == 0:
-                    stop_type = "pickup"
-                    last_stop_location = trip.pickup_location
-                elif fuel_stop and i == 1:
-                    stop_type = "fuel"
-                    print(f"Fuel stop: {fuel_stop}")
-                    last_stop_location = fuel_stop
+            # Create stops for each location (except current location)
+            for i, (location, location_data) in enumerate(zip(locations[1:], locations_data[1:]), start=1):
+                # Determine stop type based on location slug
+                slug = location_data.get('slug', '')
+                print(f"Processing stop {i}:")
+                print(f"Location data: {location_data}")
+                print(f"Location: {location}")
+                print(f"Slug: {slug}")
+                
+                if slug == 'pickupLocation':
+                    stop_type = 'pickup'
+                    duration_minutes = 60
+                elif slug == 'dropoffLocation':
+                    stop_type = 'dropoff'
+                    duration_minutes = 60
+                elif slug == 'fuelStop':
+                    stop_type = 'fuel'
+                    duration_minutes = 30
                 else:
-                    stop_type = "dropoff"
-                    last_stop_location = trip.dropoff_location
+                    stop_type = 'waypoint'
+                    duration_minutes = 0
 
                 # Create the stop
                 stop = Stop.objects.create(
                     trip=trip,
-                    location=last_stop_location,
-                    summary=leg["summary"],
-                    sequence=i + 1,
+                    location=location,
+                    sequence=i,
                     status="pending",
                     stop_type=stop_type,
-                    arrival_time=current_time + timedelta(seconds=leg["duration"]),
-                    duration_minutes=(
-                        60
-                        if stop_type in ["pickup", "dropoff"]
-                        else 30 if stop_type == "fuel" else 0
-                    ),
-                    cycle_hours_at_stop=current_cycle_hours + (leg["duration"] / 3600),
-                    distance_from_last_stop=leg["distance"] / 1609.34,
+                    arrival_time=current_time,
+                    duration_minutes=duration_minutes,
+                    cycle_hours_at_stop=current_cycle_hours,
                 )
                 print(f"Created {stop_type} stop: {stop.id}")
 
                 # Update tracking variables
-                current_cycle_hours += (leg["duration"] / 3600) + (
-                    stop.duration_minutes / 60
-                )
-                total_distance += leg["distance"] / 1609.34
-                last_stop_location = stop.location
-                current_time += timedelta(
-                    seconds=leg["duration"] + (stop.duration_minutes * 60)
-                )
+                current_cycle_hours += duration_minutes / 60
+                current_time += timedelta(minutes=duration_minutes)
 
             # Add rest stops based on HOS compliance
             MAX_DRIVING_HOURS = 11  # Maximum driving hours per day
@@ -208,10 +220,12 @@ class TripViewSet(viewsets.ModelViewSet):
 
             # Add rest stops if needed
             if current_cycle_hours >= MAX_DRIVING_HOURS:
+                # Use the last location for rest stop
+                last_location = locations[-1]
                 rest_stop = Stop.objects.create(
                     trip=trip,
-                    location=last_stop_location,
-                    sequence=len(legs) + 1,
+                    location=last_location,
+                    sequence=len(locations),
                     status="pending",
                     stop_type="rest",
                     arrival_time=current_time,
@@ -229,8 +243,9 @@ class TripViewSet(viewsets.ModelViewSet):
             trip.save()
             print(f"Updated trip status to: {trip.status}")
 
+            # Use TripSerializer for the response
             response_data = {
-                "trip": self.get_serializer(trip).data,
+                "trip": TripSerializer(trip).data,
                 "route": route_data,
                 "stops": StopSerializer(trip.stops.all(), many=True).data,
             }
@@ -390,12 +405,10 @@ class TripViewSet(viewsets.ModelViewSet):
                 if i == 0:
                     stop_type = "pickup"
                     last_stop_location = trip.pickup_location
-                elif fuel_stop and i == best_fuel_position:
+                elif fuel_stop and i == 1:
                     stop_type = "fuel"
-                    print(
-                        f"Fuel stop at position {best_fuel_position}: {trip.fuel_stop}"
-                    )
-                    last_stop_location = trip.fuel_stop
+                    print(f"Fuel stop: {fuel_stop}")
+                    last_stop_location = fuel_stop
                 else:
                     stop_type = "dropoff"
                     last_stop_location = trip.dropoff_location
@@ -547,6 +560,15 @@ class TripViewSet(viewsets.ModelViewSet):
             if not stop_id or not new_status:
                 return Response(
                     {"error": "stop_id and status are required"},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
+            # Convert stop_id to integer
+            try:
+                stop_id = int(stop_id)
+            except (TypeError, ValueError):
+                return Response(
+                    {"error": "Invalid stop_id format"},
                     status=status.HTTP_400_BAD_REQUEST,
                 )
 

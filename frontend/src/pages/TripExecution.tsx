@@ -115,8 +115,8 @@ const TripExecution: React.FC = () => {
     if (tripStatus === 'in_progress') {
       let currentSegmentIndex = 0;
       let progressInSegment = 0;
-      const UPDATE_INTERVAL = 5000; // Update every second
-      const MOVEMENT_SPEED = 1; // Adjusted speed for smoother movement
+      const UPDATE_INTERVAL = 1000; // Update every second
+      const MOVEMENT_SPEED = 10; // Adjusted speed for smoother movement
 
       const interval = setInterval(() => {
         if (trip?.route?.routes?.[0]?.geometry?.coordinates) {
