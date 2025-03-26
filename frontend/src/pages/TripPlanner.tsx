@@ -1,3 +1,4 @@
+import { DragDropContext, Droppable, Draggable } from "react-beautiful-dnd";
 import { useState, useEffect } from "react";
 import { useDispatch, useSelector } from "react-redux";
 import { createTrip, planRoute } from "../store/slices/tripSlice";
@@ -28,7 +29,7 @@ import { Button } from "@/components/ui/button";
 import { useNavigate } from "react-router-dom";
 import { useAppDispatch } from "@/hooks/useAppDispatch";
 import { useAppSelector } from "@/hooks/useAppSelector";
-import type { Location } from "@/types";
+import type { Location, LocationInputModel } from "@/types";
 
 import { leafletIcons } from "../utils/leaflet-icons";
 
@@ -77,46 +78,36 @@ const MapClickHandler = ({
 };
 
 // Add BoundsUpdater component
+
 const BoundsUpdater = ({
-  currentLocation,
-  pickupLocation,
-  dropoffLocation,
+  locations,
 }: {
-  currentLocation: { latitude: number; longitude: number };
-  pickupLocation: { latitude: number; longitude: number };
-  dropoffLocation: { latitude: number; longitude: number };
+  locations: { latitude: number; longitude: number }[];
 }) => {
   const map = useMap();
-
+  console.log("Locations", locations);
   useEffect(() => {
-    if (currentLocation.latitude !== 0 && currentLocation.longitude !== 0) {
-      // Create bounds with current location
+    if (locations.length > 0) {
+      // Create bounds with the first location
       const bounds = new L.LatLngBounds(
-        [currentLocation.latitude, currentLocation.longitude],
-        [currentLocation.latitude, currentLocation.longitude]
+        [locations[0].latitude, locations[0].longitude],
+        [locations[0].latitude, locations[0].longitude]
       );
+      console.log("Bounds", locations);
+      // Extend bounds with all locations
+      locations.forEach((location) => {
+        if (location.latitude !== 0 && location.longitude !== 0) {
+          bounds.extend([location.latitude, location.longitude]);
+        }
+      });
 
-      // Extend bounds with pickup and dropoff locations if they exist
-      if (pickupLocation.latitude !== 0 && pickupLocation.longitude !== 0) {
-        bounds.extend([pickupLocation.latitude, pickupLocation.longitude]);
-      }
-      if (dropoffLocation.latitude !== 0 && dropoffLocation.longitude !== 0) {
-        bounds.extend([dropoffLocation.latitude, dropoffLocation.longitude]);
-      }
-
-      // If we only have current location, center and zoom
-      if (pickupLocation.latitude === 0 && dropoffLocation.latitude === 0) {
-        map.setView([currentLocation.latitude, currentLocation.longitude], 13);
-      } else {
-        // If we have multiple points, fit bounds with padding
-        map.fitBounds(bounds, { padding: [50, 50] });
-      }
+      // Fit bounds with padding
+      map.fitBounds(bounds, { padding: [50, 50] });
     }
-  }, [map, currentLocation, pickupLocation, dropoffLocation]);
+  }, [map, locations]);
 
   return null;
 };
-
 // Add interfaces for type safety
 interface TimelineEntry {
   type:
@@ -218,14 +209,75 @@ const TripPlanner = () => {
   const dispatch = useAppDispatch();
   const navigate = useNavigate();
   const { greenIcon, redIcon, defaultIcon, yellowIcon } = leafletIcons;
+  function createStopIcon(stopType: string) {
+    switch (stopType) {
+      case "pickup":
+        return greenIcon;
+      case "dropoff":
+        return redIcon;
+
+      case "fuel":
+        return yellowIcon;
+
+      case "rest":
+        return defaultIcon;
+
+      default:
+        return defaultIcon;
+    }
+  }
   // Form state
-  const [formState, setFormState] = useState({
-    currentLocation: { latitude: 0, longitude: 0 },
-    pickupLocation: { latitude: 0, longitude: 0 },
-    dropoffLocation: { latitude: 0, longitude: 0 },
-    fuelStop: undefined as Location | undefined,
+  const [formState, setFormState] = useState<{
+    locations: LocationInputModel[];
+    currentCycleHours: number;
+  }>({
+    locations: [
+      {
+        id: "1",
+        slug: "currentLocation",
+        title: "Current Location",
+        latitude: 0,
+        longitude: 0,
+      },
+      {
+        id: "2",
+        slug: "pickupLocation",
+        title: "Pickup Location",
+        latitude: 0,
+        longitude: 0,
+      },
+      {
+        id: "3",
+        slug: "dropoffLocation",
+        title: "Dropoff Location",
+        latitude: 0,
+        longitude: 0,
+      },
+      {
+        id: "4",
+        slug: "fuelStop",
+        title: "Fuel Stop",
+        latitude: 0,
+        longitude: 0,
+      },
+    ],
+
     currentCycleHours: 0,
   });
+  const handleOnDragEnd = (result: any) => {
+    const { source, destination } = result;
+
+    // If dropped outside the list or if dropped at the same position, do nothing
+    if (!destination || source.index === destination.index) {
+      return;
+    }
+
+    const items = Array.from(formState.locations);
+    const [removed] = items.splice(source.index, 1); // Remove item from original index
+    items.splice(destination.index, 0, removed);
+
+    setFormState({ ...formState, locations: items });
+  };
 
   // UI state
   const [loading, setLoading] = useState(false);
@@ -234,6 +286,9 @@ const TripPlanner = () => {
   const [isSuccessOpen, setIsSuccessOpen] = useState(false);
   const [hasFuelStop, setHasFuelStop] = useState(false);
   const [isFuelStopRequired, setIsFuelStopRequired] = useState(false);
+  const [activeLocation, setActiveLocation] =
+    useState<string>("pickupLocation");
+
   const [tripData, setTripData] = useState<Trip | null>(null);
   const [isSelectingFuelStop, setIsSelectingFuelStop] = useState(false);
   const [routeData, setRouteData] = useState<RouteData>({
@@ -261,18 +316,42 @@ const TripPlanner = () => {
     const miles = (meters / 1609.34).toFixed(1);
     return `${miles} miles`;
   };
+  const updateLocation = ({
+    id,
+    newLatitude,
+    newLongitude,
+  }: {
+    id: string;
+    newLatitude: number;
+    newLongitude: number;
+  }) => {
+    setFormState((prevFormState) => ({
+      ...prevFormState, // Ensure you keep all other properties unchanged
+      locations: prevFormState.locations.map(
+        (location) =>
+          location.id === id
+            ? { ...location, latitude: newLatitude, longitude: newLongitude } // Update only the specific location
+            : location // Leave other locations unchanged
+      ),
+    }));
+  };
 
   useEffect(() => {
     if ("geolocation" in navigator) {
       navigator.geolocation.getCurrentPosition(
         (position) => {
-          setFormState((prev) => ({
-            ...prev,
-            currentLocation: {
-              latitude: position.coords.latitude,
-              longitude: position.coords.longitude,
-            },
-          }));
+          // Directly get the location with the slug 'currentLocation'
+          const currentLocation = formState.locations.find(
+            (loc) => loc.slug === "currentLocation"
+          );
+
+          if (currentLocation) {
+            updateLocation({
+              id: currentLocation.id, // Use the id directly
+              newLatitude: position.coords.latitude,
+              newLongitude: position.coords.longitude,
+            });
+          }
         },
         (error) => {
           setError(
@@ -285,58 +364,58 @@ const TripPlanner = () => {
       setError("Geolocation is not supported by your browser.");
     }
   }, []);
+  useEffect(() => {
+    console.log("Updated formState:", formState);
+  }, [formState]);
 
   const handleLocationSelect = (location: {
     latitude: number;
     longitude: number;
   }) => {
-    if (isSelectingFuelStop) {
-      setFormState((prev) => ({
-        ...prev,
-        fuelStop: location,
-      }));
-      setHasFuelStop(true);
-      setIsSelectingFuelStop(false);
-      return;
+    setFormState((prev) => {
+      const updatedLocations = prev.locations.map((loc) => {
+        if (loc.slug === activeLocation && loc.latitude === 0) {
+          return {
+            ...loc,
+            latitude: location.latitude,
+            longitude: location.longitude,
+          };
+        }
+        return loc;
+      });
+      const newActiveLocation = formState.locations.find(
+        (location) => location.slug != activeLocation && location.latitude == 0
+      );
+      newActiveLocation && handleActiveLocationChange(newActiveLocation?.slug);
+      return { ...prev, locations: updatedLocations };
+    });
+  };
+
+  const handleActiveLocationChange = (locationSlug: string) => {
+    // Set the active location to the slug of the location being selected
+    setActiveLocation(locationSlug);
+  };
+
+  const handleLocationChange = (
+    index: number,
+    field: keyof LocationInputModel,
+    value: string
+  ) => {
+    const newLocations = [...formState.locations];
+    // Determine if the field is latitude or longitude (which are numbers) and parse the value accordingly
+    if (field === "latitude" || field === "longitude") {
+      // Parse the value to a number
+      const parsedValue = parseFloat(value);
+      if (isNaN(parsedValue)) {
+        // Handle invalid input for number fields (optional)
+        return;
+      }
+      newLocations[index][field] = parsedValue;
+    } else {
+      // For other fields like id, slug, or title, assign the value directly (it's a string)
+      newLocations[index][field] = value;
     }
-
-    if (formState.pickupLocation.latitude === 0) {
-      setFormState((prev) => ({
-        ...prev,
-        pickupLocation: location,
-      }));
-    } else if (formState.dropoffLocation.latitude === 0) {
-      setFormState((prev) => ({
-        ...prev,
-        dropoffLocation: location,
-      }));
-    }
-  };
-
-  const handleRemovePickup = () => {
-    setFormState((prev) => ({
-      ...prev,
-      pickupLocation: { latitude: 0, longitude: 0 },
-    }));
-  };
-
-  const handleRemoveDropoff = () => {
-    setFormState((prev) => ({
-      ...prev,
-      dropoffLocation: { latitude: 0, longitude: 0 },
-    }));
-  };
-
-  const handleAddFuelStop = () => {
-    setIsSelectingFuelStop(true);
-  };
-
-  const handleRemoveFuelStop = () => {
-    setFormState((prev) => ({
-      ...prev,
-      fuelStop: undefined,
-    }));
-    setHasFuelStop(false);
+    setFormState({ ...formState, locations: newLocations });
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -346,10 +425,9 @@ const TripPlanner = () => {
 
     try {
       const tripPayload = {
-        current_location: formState.currentLocation,
-        pickup_location: formState.pickupLocation,
-        dropoff_location: formState.dropoffLocation,
-        fuel_stop: formState.fuelStop,
+        locations: formState.locations.filter(
+          (location) => location.latitude != 0
+        ),
         current_cycle_hours: formState.currentCycleHours,
       };
 
@@ -389,11 +467,15 @@ const TripPlanner = () => {
 
   // Default center for the map
   const defaultCenter: L.LatLngTuple =
-    formState.currentLocation.latitude !== 0 &&
-    formState.currentLocation.longitude !== 0
+    formState.locations.find((loc) => loc.slug == "currentLocation")!
+      .latitude !== 0 &&
+    formState.locations.find((loc) => loc.slug == "currentLocation")!
+      .longitude !== 0
       ? [
-          formState.currentLocation.latitude,
-          formState.currentLocation.longitude,
+          formState.locations.find((loc) => loc.slug == "currentLocation")!
+            .latitude,
+          formState.locations.find((loc) => loc.slug == "currentLocation")!
+            .longitude,
         ]
       : [9.0248826, 38.7807792]; // Default to Addis Ababa coordinates
 
@@ -425,103 +507,33 @@ const TripPlanner = () => {
                 attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
                 url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
               />
-              <BoundsUpdater
-                currentLocation={formState.currentLocation}
-                pickupLocation={formState.pickupLocation}
-                dropoffLocation={formState.dropoffLocation}
-              />
+              <BoundsUpdater locations={formState.locations} />
               <MapClickHandler onLocationSelect={handleLocationSelect} />
 
               {/* Update RoutePolyline rendering */}
               {routeGeometry && <RoutePolyline geometry={routeGeometry} />}
 
               {/* Current Location Marker */}
-              {formState.currentLocation.latitude !== 0 &&
-                formState.currentLocation.longitude !== 0 && (
-                  <LocationMarker
-                    position={[
-                      formState.currentLocation.latitude,
-                      formState.currentLocation.longitude,
-                    ]}
-                    icon={defaultIcon}
-                  >
-                    <Popup>
-                      <div className="p-2">
-                        <div className="font-semibold">Current Location</div>
-                        <div className="text-sm text-gray-600">Stop #1</div>
-                      </div>
-                    </Popup>
-                  </LocationMarker>
-                )}
 
-              {/* Pickup Location Marker */}
-              {formState.pickupLocation.latitude !== 0 && (
-                <LocationMarker
-                  position={[
-                    formState.pickupLocation.latitude,
-                    formState.pickupLocation.longitude,
-                  ]}
-                  icon={greenIcon}
-                  onRemove={handleRemovePickup}
-                >
-                  <Popup>
-                    <div className="p-2">
-                      <div className="font-semibold">Pickup Location</div>
-                      <div className="text-sm text-gray-600">Stop #2</div>
-                    </div>
-                  </Popup>
-                </LocationMarker>
-              )}
-
-              {/* Dropoff Location Marker */}
-              {formState.dropoffLocation.latitude !== 0 && (
-                <LocationMarker
-                  position={[
-                    formState.dropoffLocation.latitude,
-                    formState.dropoffLocation.longitude,
-                  ]}
-                  icon={redIcon}
-                  onRemove={handleRemoveDropoff}
-                >
-                  <Popup>
-                    <div className="p-2">
-                      <div className="font-semibold">Dropoff Location</div>
-                      <div className="text-sm text-gray-600">
-                        Stop #{formState.fuelStop ? "4" : "3"}
-                      </div>
-                    </div>
-                  </Popup>
-                </LocationMarker>
-              )}
-
-              {/* Fuel Stop Marker */}
-              {hasFuelStop && formState.fuelStop && (
-                <LocationMarker
-                  position={[
-                    formState.fuelStop.latitude,
-                    formState.fuelStop.longitude,
-                  ]}
-                  icon={
-                    new L.Icon({
-                      iconUrl:
-                        "https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-yellow.png",
-                      shadowUrl:
-                        "https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-shadow.png",
-                      iconSize: [25, 41],
-                      iconAnchor: [12, 41],
-                      popupAnchor: [1, -34],
-                      shadowSize: [41, 41],
-                    })
-                  }
-                  onRemove={handleRemoveFuelStop}
-                >
-                  <Popup>
-                    <div className="p-2">
-                      <div className="font-semibold">Fuel Stop</div>
-                      <div className="text-sm text-gray-600">Stop #3</div>
-                    </div>
-                  </Popup>
-                </LocationMarker>
+              {formState.locations.map(
+                (location, index) =>
+                  location.latitude !== 0 &&
+                  location.longitude !== 0 && (
+                    <LocationMarker
+                      key={index}
+                      position={[location.latitude, location.longitude]}
+                      icon={createStopIcon(location.slug)}
+                    >
+                      <Popup>
+                        <div className="p-2">
+                          <div className="font-semibold">{location.title}</div>
+                          <div className="text-sm text-gray-600">
+                            Stop {index}
+                          </div>
+                        </div>
+                      </Popup>
+                    </LocationMarker>
+                  )
               )}
             </MapContainer>
           </div>
@@ -539,344 +551,88 @@ const TripPlanner = () => {
             onSubmit={handleSubmit}
             className="bg-white rounded-lg shadow-sm p-6"
           >
-            <div className="space-y-4 grid grid-cols-3 gap-4">
-              <div className="flex flex-shrink-0 gap-4">
-                <div className="w-auto h-full  rounded-full flex items-center justify-center">
-                  <div className="w-8 h-8 bg-green-100 rounded-full flex items-center justify-center">
-                    <MdLocationOn className="w-6 h-6 text-green-600" />
-                  </div>
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700">
-                    Current Location
-                  </label>
-                  <div className="mt-1 grid grid-cols-2 gap-4">
-                    <div>
-                      {/* <span className="text-sm text-gray-500">Latitude</span> */}
-                      <input
-                        type="number"
-                        step="any"
-                        placeholder="Latitude"
-                        className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 text-gray-900 focus:border-blue-500 focus:outline-none focus:ring-blue-500 sm:text-sm"
-                        value={formState.currentLocation.latitude || ""}
-                        onChange={(e) =>
-                          setFormState({
-                            ...formState,
-                            currentLocation: {
-                              ...formState.currentLocation,
-                              latitude: parseFloat(e.target.value),
-                            },
-                          })
-                        }
-                      />
-                    </div>
-                    <div>
-                      {/* <span className="text-sm text-gray-500">Longitude</span> */}
-                      <input
-                        type="number"
-                        step="any"
-                        placeholder="Longitude"
-                        className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 text-gray-900 focus:border-blue-500 focus:outline-none focus:ring-blue-500 sm:text-sm"
-                        value={formState.currentLocation.longitude || ""}
-                        onChange={(e) =>
-                          setFormState({
-                            ...formState,
-                            currentLocation: {
-                              ...formState.currentLocation,
-                              longitude: parseFloat(e.target.value),
-                            },
-                          })
-                        }
-                      />
-                    </div>
-                  </div>
-                </div>
-              </div>
-              <div className="flex flex-shrink-0 gap-4">
-                <div className="w-auto h-full  rounded-full flex items-center justify-center">
-                  <div className="w-8 h-8 bg-green-100 rounded-full flex items-center justify-center">
-                    <MdLocationOn className="w-6 h-6 text-green-600" />
-                  </div>
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700">
-                    Pickup Location
-                  </label>
-                  <div className="mt-1 grid grid-cols-2 gap-4">
-                    <div>
-                      {/* <span className="text-sm text-gray-500">Latitude</span> */}
-                      <input
-                        type="number"
-                        step="any"
-                        placeholder="Latitude"
-                        className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 text-gray-900 focus:border-blue-500 focus:outline-none focus:ring-blue-500 sm:text-sm"
-                        value={formState.pickupLocation.latitude || ""}
-                        onChange={(e) =>
-                          setFormState({
-                            ...formState,
-                            pickupLocation: {
-                              ...formState.pickupLocation,
-                              latitude: parseFloat(e.target.value),
-                            },
-                          })
-                        }
-                      />
-                    </div>
-                    <div>
-                      {/* <span className="text-sm text-gray-500">Longitude</span> */}
-                      <input
-                        type="number"
-                        step="any"
-                        placeholder="Longitude"
-                        className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 text-gray-900 focus:border-blue-500 focus:outline-none focus:ring-blue-500 sm:text-sm"
-                        value={formState.pickupLocation.longitude || ""}
-                        onChange={(e) =>
-                          setFormState({
-                            ...formState,
-                            pickupLocation: {
-                              ...formState.pickupLocation,
-                              longitude: parseFloat(e.target.value),
-                            },
-                          })
-                        }
-                      />
-                    </div>
-                  </div>
-                </div>
-              </div>
-              <div className="flex flex-shrink-0 gap-4">
-                <div className="w-auto h-full  rounded-full flex items-center justify-center">
-                  <div className="w-8 h-8 bg-green-100 rounded-full flex items-center justify-center">
-                    <MdLocationOn className="w-6 h-6 text-green-600" />
-                  </div>
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700">
-                    Dropoff Location
-                  </label>
-                  <div className="mt-1 grid grid-cols-2 gap-4">
-                    <div>
-                      {/* <span className="text-sm text-gray-500">Latitude</span> */}
-                      <input
-                        type="number"
-                        step="any"
-                        placeholder="Latitude"
-                        className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 text-gray-900 focus:border-blue-500 focus:outline-none focus:ring-blue-500 sm:text-sm"
-                        value={formState.dropoffLocation.latitude || ""}
-                        onChange={(e) =>
-                          setFormState({
-                            ...formState,
-                            dropoffLocation: {
-                              ...formState.dropoffLocation,
-                              latitude: parseFloat(e.target.value),
-                            },
-                          })
-                        }
-                      />
-                    </div>
-                    <div>
-                      {/* <span className="text-sm text-gray-500">Longitude</span> */}
-                      <input
-                        type="number"
-                        step="any"
-                        placeholder="Longitude"
-                        className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 text-gray-900 focus:border-blue-500 focus:outline-none focus:ring-blue-500 sm:text-sm"
-                        value={formState.dropoffLocation.longitude || ""}
-                        onChange={(e) =>
-                          setFormState({
-                            ...formState,
-                            dropoffLocation: {
-                              ...formState.dropoffLocation,
-                              longitude: parseFloat(e.target.value),
-                            },
-                          })
-                        }
-                      />
-                    </div>
-                  </div>
-                </div>
-              </div>
-              {/* Add Fuel Stop Button */}
-              <div className="flex items-center justify-between">
-                <div className="flex items-center space-x-2">
-                  <FaGasPump className="w-5 h-5 text-gray-400" />
-                  <span className="text-gray-600">Fuel Stop</span>
-                </div>
-                {!hasFuelStop ? (
-                  <button
-                    type="button"
-                    onClick={handleAddFuelStop}
-                    className="flex items-center justify-center px-4 py-2 border border-yellow-500 text-yellow-600 rounded-md hover:bg-yellow-50"
+            {/* <div className="space-y-4 grid grid-cols-3 gap-4"> */}
+            <DragDropContext onDragEnd={handleOnDragEnd}>
+              <Droppable droppableId="locations" direction="vertical">
+                {(provided) => (
+                  <div
+                    ref={provided.innerRef}
+                    {...provided.droppableProps}
+                    className="space-y-4"
                   >
-                    <MdLocalGasStation className="mr-2" />
-                    Add Fuel Stop
-                  </button>
-                ) : (
-                  <button
-                    type="button"
-                    onClick={handleRemoveFuelStop}
-                    className="flex items-center justify-center px-4 py-2 border border-red-500 text-red-600 rounded-md hover:bg-red-50"
-                  >
-                    <FaTimes className="mr-2" />
-                    Remove Fuel Stop
-                  </button>
+                    {/* Render currentLocation separately */}
+                    <LocationInput
+                      location={formState.locations[0]}
+                      index={0}
+                      onChange={handleLocationChange}
+                      onSelect={handleActiveLocationChange}
+                    />
+
+                    {/* Render other locations inside Droppable */}
+                    {formState.locations.slice(1).map((location, index) => (
+                      <Draggable
+                        key={location.id}
+                        draggableId={location.id}
+                        index={index + 1}
+                      >
+                        {(provided) => (
+                          <div
+                            ref={provided.innerRef}
+                            {...provided.draggableProps}
+                            {...provided.dragHandleProps}
+                          >
+                            <LocationInput
+                              location={location}
+                              index={index + 1}
+                              onChange={handleLocationChange}
+                              onSelect={handleActiveLocationChange}
+                            />
+                          </div>
+                        )}
+                      </Draggable>
+                    ))}
+                    {provided.placeholder}
+                  </div>
                 )}
-              </div>
-              {/* Current Cycle Hours Input */}
-              <div className="flex gap-4">
-                <label
-                  htmlFor="current_cycle_hours"
-                  className="block text-sm font-medium text-gray-700 py-3"
-                >
-                  Current Cycle Hours
-                </label>
-                <input
-                  type="number"
-                  min="0"
-                  max="70"
-                  step="0.1"
-                  id="current_cycle_hours"
-                  className="mt-1 block rounded-md border border-gray-300 px-3 py-2 text-gray-900 focus:border-blue-500 focus:outline-none focus:ring-blue-500 sm:text-sm"
-                  value={formState.currentCycleHours || ""}
-                  onChange={(e) =>
-                    setFormState({
-                      ...formState,
-                      currentCycleHours: parseFloat(e.target.value),
-                    })
-                  }
-                  placeholder="Hours "
-                />
-              </div>
-              {/* Generate Route Button */}
-              <div className="py-2">
-                <button
-                  type="submit"
-                  disabled={loading}
-                  className="w-full bg-blue-600 text-white py-2 px-4 rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:opacity-50"
-                >
-                  {loading ? "Planning..." : "Generate Route Plan"}
-                </button>
-              </div>
+              </Droppable>
+            </DragDropContext>
+
+            {/* Current Cycle Hours Input */}
+            <div className="flex gap-4">
+              <label
+                htmlFor="current_cycle_hours"
+                className="block text-sm font-medium text-gray-700 py-3"
+              >
+                Current Cycle Hours
+              </label>
+              <input
+                type="number"
+                min="0"
+                max="70"
+                step="0.1"
+                id="current_cycle_hours"
+                className="mt-1 block rounded-md border border-gray-300 px-3 py-2 text-gray-900 focus:border-blue-500 focus:outline-none focus:ring-blue-500 sm:text-sm"
+                value={formState.currentCycleHours || ""}
+                onChange={(e) =>
+                  setFormState({
+                    ...formState,
+                    currentCycleHours: parseFloat(e.target.value),
+                  })
+                }
+                placeholder="Hours "
+              />
+            </div>
+            {/* Generate Route Button */}
+            <div className="py-2">
+              <button
+                type="submit"
+                disabled={loading}
+                className="w-full bg-blue-600 text-white py-2 px-4 rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:opacity-50"
+              >
+                {loading ? "Planning..." : "Generate Route Plan"}
+              </button>
             </div>
           </form>
-        </div>
-      )}
-
-      {/* Bottom Sections */}
-      {tripData && routeData && (
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mt-8">
-          {/* Route Timeline */}
-          <div className="bg-white rounded-lg shadow-sm p-6">
-            <h2 className="text-lg font-semibold mb-4">Route Timeline</h2>
-            <div className="space-y-6">
-              {routeData.timeline.map((stop: any, index: number) => (
-                <div key={index} className="flex items-start space-x-3">
-                  <div className="flex-shrink-0">
-                    {/* Stop Index Badge */}
-                    <div className="w-8 h-8 rounded-full bg-gray-100 flex items-center justify-center text-sm font-medium text-gray-600">
-                      {stop.index + 1}
-                    </div>
-                  </div>
-                  <div>
-                    <p className="font-medium text-gray-900">{stop.location}</p>
-                    <p className="text-sm text-gray-500">{stop.time}</p>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          {/* ELD Logs */}
-          <div className="bg-white rounded-lg shadow-sm p-6">
-            <h2 className="text-lg font-semibold mb-4">ELD Logs</h2>
-            <div className="space-y-4">
-              <div>
-                <div className="flex justify-between items-center mb-1">
-                  <span className="text-sm text-gray-600">Driving Time</span>
-                  <span className="text-sm font-medium">
-                    {routeData.eldLogs.drivingTime}
-                  </span>
-                </div>
-                <div className="w-full bg-gray-200 rounded-full h-2">
-                  <div
-                    className="bg-green-500 h-2 rounded-full"
-                    style={{ width: "70%" }}
-                  ></div>
-                </div>
-              </div>
-              <div>
-                <div className="flex justify-between items-center mb-1">
-                  <span className="text-sm text-gray-600">On Duty</span>
-                  <span className="text-sm font-medium">
-                    {routeData.eldLogs.onDuty}
-                  </span>
-                </div>
-                <div className="w-full bg-gray-200 rounded-full h-2">
-                  <div
-                    className="bg-yellow-500 h-2 rounded-full"
-                    style={{ width: "30%" }}
-                  ></div>
-                </div>
-              </div>
-              <div>
-                <div className="flex justify-between items-center mb-1">
-                  <span className="text-sm text-gray-600">Rest Time</span>
-                  <span className="text-sm font-medium">
-                    {routeData.eldLogs.restTime}
-                  </span>
-                </div>
-                <div className="w-full bg-gray-200 rounded-full h-2">
-                  <div
-                    className="bg-blue-500 h-2 rounded-full"
-                    style={{ width: "50%" }}
-                  ></div>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {/* Trip Summary */}
-          <div className="bg-white rounded-lg shadow-sm p-6">
-            <h2 className="text-lg font-semibold mb-4">Trip Summary</h2>
-            <div className="space-y-4">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center space-x-2">
-                  <FaTruck className="w-5 h-5 text-gray-400" />
-                  <span className="text-gray-600">Total Distance</span>
-                </div>
-                <span className="font-medium">
-                  {routeData.summary.totalDistance}
-                </span>
-              </div>
-              <div className="flex items-center justify-between">
-                <div className="flex items-center space-x-2">
-                  <BiTimeFive className="w-5 h-5 text-gray-400" />
-                  <span className="text-gray-600">Est. Duration</span>
-                </div>
-                <span className="font-medium">
-                  {routeData.summary.estimatedDuration}
-                </span>
-              </div>
-              <div className="flex items-center justify-between">
-                <div className="flex items-center space-x-2">
-                  <FaGasPump className="w-5 h-5 text-gray-400" />
-                  <span className="text-gray-600">Fuel Stops</span>
-                </div>
-                <span className="font-medium">
-                  {routeData.summary.fuelStops}
-                </span>
-              </div>
-              <div className="flex items-center justify-between">
-                <div className="flex items-center space-x-2">
-                  <FaBed className="w-5 h-5 text-gray-400" />
-                  <span className="text-gray-600">Rest Stops</span>
-                </div>
-                <span className="font-medium">
-                  {routeData.summary.restStops}
-                </span>
-              </div>
-            </div>
-          </div>
         </div>
       )}
 
@@ -922,3 +678,61 @@ const TripPlanner = () => {
 };
 
 export default TripPlanner;
+const LocationInput = ({
+  location,
+  index,
+  onChange,
+  onSelect,
+}: {
+  location: LocationInputModel;
+  index: number;
+  onChange: (
+    index: number,
+    field: keyof LocationInputModel,
+    value: string
+  ) => void;
+  onSelect: (slug: string) => void;
+}) => (
+  <div className="flex flex-shrink-0 gap-4 border border-gray-300 p-4 rounded-md">
+    <div className="w-auto h-full rounded-full flex items-center justify-center">
+      <div className="w-8 h-8 bg-green-100 rounded-full flex items-center justify-center">
+        <MdLocationOn className="w-6 h-6 text-green-600" />
+      </div>
+    </div>
+    <div>
+      <label className="block text-sm font-medium text-gray-700">
+        {location.title}
+      </label>
+      <div className="mt-1 flex gap-4">
+        <div>
+          <input
+            type="number"
+            step="any"
+            placeholder="Latitude"
+            className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 text-gray-900 focus:border-blue-500 focus:outline-none focus:ring-blue-500 sm:text-sm"
+            value={location.latitude}
+            onChange={(e) => onChange(index, "latitude", e.target.value)}
+          />
+        </div>
+        <div>
+          <input
+            type="number"
+            step="any"
+            placeholder="Longitude"
+            className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 text-gray-900 focus:border-blue-500 focus:outline-none focus:ring-blue-500 sm:text-sm"
+            value={location.longitude}
+            onChange={(e) => onChange(index, "longitude", e.target.value)}
+          />
+        </div>
+        <div>
+          <button
+            className="flex items-center justify-center px-4 py-2 border border-yellow-500 text-yellow-600 rounded-md hover:bg-yellow-50"
+            onClick={() => onSelect(location.slug)}
+          >
+            Select on Map
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+);

@@ -2,6 +2,13 @@ export interface Location {
   latitude: number;
   longitude: number;
 }
+export type LocationInputModel = {
+  id: string;
+  slug: string;
+  title: string;
+  latitude: number;
+  longitude: number;
+};
 
 export interface Stop {
   id: string;
@@ -9,8 +16,8 @@ export interface Stop {
   location: Location;
   sequence: number;
   summary: string;
-  status: 'pending' | 'completed' | 'skipped';
-  stop_type: 'pickup' | 'dropoff' | 'rest' | 'fuel';
+  status: "pending" | "completed" | "skipped";
+  stop_type: "pickup" | "dropoff" | "rest" | "fuel";
   arrival_time: string;
   duration_minutes: number;
   cycle_hours_at_stop: number;
@@ -28,7 +35,7 @@ export interface LogSheet {
   end_location?: Location;
   start_cycle_hours: number;
   end_cycle_hours?: number;
-  status: 'active' | 'completed';
+  status: "active" | "completed";
   created_at: string;
   updated_at: string;
 }
@@ -68,13 +75,13 @@ export interface Trip {
   dropoff_location: Location;
   fuel_stop?: Location;
   current_cycle_hours: number;
-  status: 'planned' | 'in_progress' | 'completed';
+  status: "planned" | "in_progress" | "completed";
   route?: Route;
   stops: Stop[];
   log_sheets: LogSheet[];
   created_at: string;
   updated_at: string;
-} 
+}
 
 export interface User {
   id: string;
@@ -82,7 +89,6 @@ export interface User {
   first_name: string;
   last_name: string;
 }
-
 
 export interface LoginData {
   email: string;
@@ -104,4 +110,4 @@ export interface AuthResponse {
 export interface AuthError {
   message: string;
   errors?: Record<string, string[]>;
-} 
+}

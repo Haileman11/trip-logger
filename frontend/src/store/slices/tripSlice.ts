@@ -1,9 +1,9 @@
-import { createSlice, createAsyncThunk } from '@reduxjs/toolkit';
-import { RootState } from '../../store';
-import { Trip, Location, Stop } from '../../types';
-import { apiRequest } from '../../utils/api';
+import { createSlice, createAsyncThunk } from "@reduxjs/toolkit";
+import { RootState } from "../../store";
+import { Trip, Location, Stop, LocationInputModel } from "../../types";
+import { apiRequest } from "../../utils/api";
 
-const API_BASE_URL = 'http://localhost:8000';
+const API_BASE_URL = "http://localhost:8000";
 
 interface TripState {
   trips: Trip[];
@@ -43,41 +43,51 @@ interface PlanRouteResponse {
 }
 
 export const fetchTrips = createAsyncThunk(
-  'trips/fetchTrips',
-  async ({ page = 1, sortBy = 'id', sortOrder = 'desc' }: { page?: number; sortBy?: string; sortOrder?: 'asc' | 'desc' } = {}) => {
+  "trips/fetchTrips",
+  async ({
+    page = 1,
+    sortBy = "id",
+    sortOrder = "desc",
+  }: { page?: number; sortBy?: string; sortOrder?: "asc" | "desc" } = {}) => {
     try {
       const params = new URLSearchParams({
         page: page.toString(),
-        ordering: sortOrder === 'desc' ? `-${sortBy}` : sortBy,
+        ordering: sortOrder === "desc" ? `-${sortBy}` : sortBy,
       });
-      
-      const response = await apiRequest<TripResponse | Trip[]>(`${API_BASE_URL}/api/trips/?${params.toString()}`);
-      
+
+      const response = await apiRequest<TripResponse | Trip[]>(
+        `${API_BASE_URL}/api/trips/?${params.toString()}`
+      );
+
       // Handle both paginated and non-paginated responses
-      const trips = Array.isArray(response.data) ? response.data : (response.data as TripResponse).results || [];
-      const pagination = Array.isArray(response.data) ? {
-        count: trips.length,
-        next: null,
-        previous: null,
-      } : {
-        count: (response.data as TripResponse).count || trips.length,
-        next: (response.data as TripResponse).next || null,
-        previous: (response.data as TripResponse).previous || null,
-      };
-      
+      const trips = Array.isArray(response.data)
+        ? response.data
+        : (response.data as TripResponse).results || [];
+      const pagination = Array.isArray(response.data)
+        ? {
+            count: trips.length,
+            next: null,
+            previous: null,
+          }
+        : {
+            count: (response.data as TripResponse).count || trips.length,
+            next: (response.data as TripResponse).next || null,
+            previous: (response.data as TripResponse).previous || null,
+          };
+
       return {
         trips,
-        pagination
+        pagination,
       };
     } catch (error) {
-      console.error('Error fetching trips:', error);
+      console.error("Error fetching trips:", error);
       throw error;
     }
   }
 );
 
 export const fetchTrip = createAsyncThunk(
-  'trip/fetchTrip',
+  "trip/fetchTrip",
   async (tripId: string) => {
     const response = await apiRequest(`${API_BASE_URL}/api/trips/${tripId}`);
     return response.data as Trip;
@@ -85,128 +95,156 @@ export const fetchTrip = createAsyncThunk(
 );
 
 export const createTrip = createAsyncThunk(
-  'trips/createTrip',
+  "trips/createTrip",
   async (tripData: {
-    current_location: Location;
-    pickup_location: Location;
-    dropoff_location: Location;
-    fuel_stop?: Location;
+    locations: LocationInputModel[];
     current_cycle_hours: number;
   }) => {
     try {
       const response = await apiRequest(`${API_BASE_URL}/api/trips/`, {
-        method: 'POST',
+        method: "POST",
         body: JSON.stringify(tripData),
       });
-      
-      console.log('Trip created response:', response.data);
+
+      console.log("Trip created response:", response.data);
       return response.data;
     } catch (error) {
-      console.error('Error in createTrip:', error);
+      console.error("Error in createTrip:", error);
       throw error;
     }
   }
 );
 
 export const planRoute = createAsyncThunk(
-  'trips/planRoute',
+  "trips/planRoute",
   async (tripId: number, { getState }) => {
     const state = getState() as RootState;
     const trip = state.trips.currentTrip;
-    
-    const response = await apiRequest<PlanRouteResponse>(`${API_BASE_URL}/api/trips/${tripId}/plan_route/`, {
-      method: 'POST',
-      body: JSON.stringify({
-        fuelStop: trip?.fuel_stop ? {
-          latitude: trip.fuel_stop.latitude,
-          longitude: trip.fuel_stop.longitude
-        } : undefined
-      })
-    });
+
+    const response = await apiRequest<PlanRouteResponse>(
+      `${API_BASE_URL}/api/trips/${tripId}/plan_route/`,
+      {
+        method: "POST",
+        body: JSON.stringify({
+          locations: trip?.fuel_stop
+            ? {
+                latitude: trip.fuel_stop.latitude,
+                longitude: trip.fuel_stop.longitude,
+              }
+            : undefined,
+        }),
+      }
+    );
     return response.data;
   }
 );
 
 export const startTrip = createAsyncThunk(
-  'trip/startTrip',
+  "trip/startTrip",
   async (tripId: string) => {
-    const response = await apiRequest(`${API_BASE_URL}/api/trips/${tripId}/start_trip/`, {
-      method: 'POST',
-    });
+    const response = await apiRequest(
+      `${API_BASE_URL}/api/trips/${tripId}/start_trip/`,
+      {
+        method: "POST",
+      }
+    );
     return response.data as Trip;
   }
 );
 
 export const updateStopStatus = createAsyncThunk(
-  'trip/updateStopStatus',
-  async ({ tripId, stopId, status }: { tripId: string; stopId: string; status: string }) => {
-    const response = await apiRequest(`${API_BASE_URL}/api/trips/${tripId}/update_stop_status/`, {
-      method: 'POST',
-      body: JSON.stringify({ stop_id: stopId, status }),
-    });
+  "trip/updateStopStatus",
+  async ({
+    tripId,
+    stopId,
+    status,
+  }: {
+    tripId: string;
+    stopId: string;
+    status: string;
+  }) => {
+    const response = await apiRequest(
+      `${API_BASE_URL}/api/trips/${tripId}/update_stop_status/`,
+      {
+        method: "POST",
+        body: JSON.stringify({ stop_id: stopId, status }),
+      }
+    );
     return response.data as Trip;
   }
 );
 
 export const createStop = createAsyncThunk(
-  'trip/createStop',
+  "trip/createStop",
   async ({ tripId, stopData }: { tripId: string; stopData: Partial<Stop> }) => {
-    const response = await apiRequest(`${API_BASE_URL}/api/trips/${tripId}/create_stop/`, {
-      method: 'POST',
-      body: JSON.stringify(stopData),
-    });
+    const response = await apiRequest(
+      `${API_BASE_URL}/api/trips/${tripId}/create_stop/`,
+      {
+        method: "POST",
+        body: JSON.stringify(stopData),
+      }
+    );
     return response.data as Trip;
   }
 );
 
 export const deleteStop = createAsyncThunk(
-  'trip/deleteStop',
+  "trip/deleteStop",
   async ({ tripId, stopId }: { tripId: string; stopId: string }) => {
-    const response = await apiRequest(`${API_BASE_URL}/api/trips/${tripId}/delete_stop/?stop_id=${stopId}`, {
-      method: 'DELETE',
-    });
+    const response = await apiRequest(
+      `${API_BASE_URL}/api/trips/${tripId}/delete_stop/?stop_id=${stopId}`,
+      {
+        method: "DELETE",
+      }
+    );
     return response.data as Trip;
   }
 );
 
 export const completeTrip = createAsyncThunk(
-  'trip/completeTrip',
+  "trip/completeTrip",
   async (tripId: string) => {
-    const response = await apiRequest(`${API_BASE_URL}/api/trips/${tripId}/complete/`, {
-      method: 'POST',
-    });
+    const response = await apiRequest(
+      `${API_BASE_URL}/api/trips/${tripId}/complete/`,
+      {
+        method: "POST",
+      }
+    );
     return response.data as Trip;
   }
 );
 
 export const deleteTrip = createAsyncThunk(
-  'trip/deleteTrip',
+  "trip/deleteTrip",
   async (tripId: string) => {
     const response = await apiRequest(`${API_BASE_URL}/api/trips/${tripId}/`, {
-      method: 'DELETE',
+      method: "DELETE",
     });
     return tripId;
   }
 );
 
 export const updateLocation = createAsyncThunk(
-  'trip/updateLocation',
+  "trip/updateLocation",
   async ({ tripId, location }: { tripId: string; location: Location }) => {
-    const response = await apiRequest(`${API_BASE_URL}/api/trips/${tripId}/update_location/`, {
-      method: 'POST',
-      body: JSON.stringify({ location }),
-    });
+    const response = await apiRequest(
+      `${API_BASE_URL}/api/trips/${tripId}/update_location/`,
+      {
+        method: "POST",
+        body: JSON.stringify({ location }),
+      }
+    );
     return response.data as Trip;
   }
 );
 
 const tripSlice = createSlice({
-  name: 'trip',
+  name: "trip",
   initialState,
   reducers: {
     setCurrentTrip: (state, action) => {
       state.currentTrip = action.payload;
-    }
+    },
   },
   extraReducers: (builder) => {
     builder
@@ -222,7 +260,7 @@ const tripSlice = createSlice({
       })
       .addCase(fetchTrips.rejected, (state, action) => {
         state.loading = false;
-        state.error = action.error.message || 'Failed to fetch trips';
+        state.error = action.error.message || "Failed to fetch trips";
         state.trips = [];
         state.pagination = {
           count: 0,
@@ -240,7 +278,7 @@ const tripSlice = createSlice({
       })
       .addCase(fetchTrip.rejected, (state, action) => {
         state.loading = false;
-        state.error = action.error.message || 'Failed to fetch trip';
+        state.error = action.error.message || "Failed to fetch trip";
       })
       .addCase(planRoute.pending, (state) => {
         state.loading = true;
@@ -253,13 +291,13 @@ const tripSlice = createSlice({
             ...state.currentTrip,
             stops: action.payload.stops,
             route: action.payload.route,
-            status: action.payload.trip.status
+            status: action.payload.trip.status,
           };
         }
       })
       .addCase(planRoute.rejected, (state, action) => {
         state.loading = false;
-        state.error = action.error.message || 'Failed to plan route';
+        state.error = action.error.message || "Failed to plan route";
       })
       .addCase(startTrip.pending, (state) => {
         state.loading = true;
@@ -273,7 +311,7 @@ const tripSlice = createSlice({
       })
       .addCase(startTrip.rejected, (state, action) => {
         state.loading = false;
-        state.error = action.error.message || 'Failed to start trip';
+        state.error = action.error.message || "Failed to start trip";
       })
       .addCase(updateStopStatus.pending, (state) => {
         state.loading = true;
@@ -287,7 +325,7 @@ const tripSlice = createSlice({
       })
       .addCase(updateStopStatus.rejected, (state, action) => {
         state.loading = false;
-        state.error = action.error.message || 'Failed to update stop status';
+        state.error = action.error.message || "Failed to update stop status";
       })
       .addCase(createStop.pending, (state) => {
         state.loading = true;
@@ -301,7 +339,7 @@ const tripSlice = createSlice({
       })
       .addCase(createStop.rejected, (state, action) => {
         state.loading = false;
-        state.error = action.error.message || 'Failed to create stop';
+        state.error = action.error.message || "Failed to create stop";
       })
       .addCase(deleteStop.pending, (state) => {
         state.loading = true;
@@ -315,7 +353,7 @@ const tripSlice = createSlice({
       })
       .addCase(deleteStop.rejected, (state, action) => {
         state.loading = false;
-        state.error = action.error.message || 'Failed to delete stop';
+        state.error = action.error.message || "Failed to delete stop";
       })
       .addCase(completeTrip.fulfilled, (state, action) => {
         if (state.currentTrip) {
@@ -323,7 +361,9 @@ const tripSlice = createSlice({
         }
       })
       .addCase(deleteTrip.fulfilled, (state, action) => {
-        state.trips = state.trips.filter(trip => trip.id.toString() !== action.payload);
+        state.trips = state.trips.filter(
+          (trip) => trip.id.toString() !== action.payload
+        );
         if (state.currentTrip?.id.toString() === action.payload) {
           state.currentTrip = null;
         }
@@ -340,10 +380,10 @@ const tripSlice = createSlice({
       // })
       .addCase(updateLocation.rejected, (state, action) => {
         state.loading = false;
-        state.error = action.error.message || 'Failed to update location';
+        state.error = action.error.message || "Failed to update location";
       });
   },
 });
 
 export const { setCurrentTrip } = tripSlice.actions;
-export default tripSlice.reducer; 
+export default tripSlice.reducer;
