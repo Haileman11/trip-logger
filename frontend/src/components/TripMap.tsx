@@ -83,13 +83,13 @@ const TripMap = ({ currentLocation, route, stops, currentStopIndex, tripStatus }
 
   // Log props for debugging
   useEffect(() => {
-    console.log('TripMap props:', {
-      currentLocation,
-      route,
-      stops,
-      currentStopIndex,
-      tripStatus
-    });
+    // console.log('TripMap props:', {
+    //   currentLocation,
+    //   route,
+    //   stops,
+    //   currentStopIndex,
+    //   tripStatus
+    // });
   }, [currentLocation, route, stops, currentStopIndex, tripStatus]);
 
   // Validate coordinates
@@ -132,7 +132,7 @@ const TripMap = ({ currentLocation, route, stops, currentStopIndex, tripStatus }
   const bounds = useMemo(() => {
     if (routeCoordinates.length > 0) {
       const bounds = L.latLngBounds(routeCoordinates);
-      console.log('Route bounds:', bounds);
+    //   console.log('Route bounds:', bounds);
       return bounds;
     }
     const defaultBounds = L.latLngBounds(
@@ -175,13 +175,15 @@ const TripMap = ({ currentLocation, route, stops, currentStopIndex, tripStatus }
             <Popup>
               <div className="p-2">
                 <h3 className="font-semibold">Current Location</h3>
+                <p>Latitude: {safeCurrentLocation.latitude}</p>
+                <p>Longitude: {safeCurrentLocation.longitude}</p>
               </div>
             </Popup>
           </Marker>
 
           {/* Stop Markers */}
           {Array.isArray(stops) && stops.length > 0 && stops.map((stop) => {
-            console.log('Processing stop:', stop);
+            
             const stopLat = stop.location.latitude;
             const stopLng = stop.location.longitude;
             if (!isValidCoordinate(stopLat, stopLng)) {
@@ -189,7 +191,7 @@ const TripMap = ({ currentLocation, route, stops, currentStopIndex, tripStatus }
               return null;
             }
             
-            console.log('Rendering stop marker:', stop);
+            
             return (
               <Marker
                 key={stop.id}
@@ -199,7 +201,7 @@ const TripMap = ({ currentLocation, route, stops, currentStopIndex, tripStatus }
                 <Popup>
                   <div className="p-2">
                     <h3 className="font-semibold">{getStopTitle(stop.stop_type)}</h3>
-                    <div className="mt-2 space-y-1 text-sm">
+                    <div className="mt-2  text-sm">
                       <p>Arrival: {stop.arrival_time ? new Date(stop.arrival_time).toLocaleString() : 'Not set'}</p>
                       <p>Duration: {stop.duration_minutes || 0} minutes</p>
                       <p>Cycle Hours: {stop.cycle_hours_at_stop ? stop.cycle_hours_at_stop.toFixed(1) : 'Not set'}</p>

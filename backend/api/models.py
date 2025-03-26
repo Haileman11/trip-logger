@@ -68,6 +68,7 @@ class Stop(models.Model):
     duration_minutes = models.IntegerField(default=0)  # Duration of the stop
     cycle_hours_at_stop = models.FloatField(null=True, blank=True)  # Hours in cycle when arriving at stop
     distance_from_last_stop = models.FloatField(null=True, blank=True)  # Distance in miles from previous stop
+    summary = models.TextField(null=True, blank=True)  # Summary of the leg
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 

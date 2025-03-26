@@ -138,7 +138,7 @@ export default function TripsList() {
                       </DropdownMenuItem>
                       {trip.status === "planned" && (
                         <DropdownMenuItem
-                          onClick={() => navigate(`/trip-execution/${trip.id}`)}
+                          onClick={() => navigate(`/trip/${trip.id}/live`)}
                         >
                           Start Trip
                         </DropdownMenuItem>
