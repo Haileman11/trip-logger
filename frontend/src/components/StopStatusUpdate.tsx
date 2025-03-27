@@ -45,7 +45,7 @@ const StopStatusUpdate: React.FC<StopStatusUpdateProps> = ({
   return (
     <div className="space-y-4">
       <div className="flex items-center space-x-3">
-        {getStopIcon(stop.stop_type)}
+        {/* {getStopIcon(stop.stop_type)} */}
         <div>
           <h3 className="text-lg font-semibold">
             {`${stop.stop_type?.toString().charAt(0).toUpperCase() + stop.stop_type?.toString().slice(1)} Stop`}

@@ -11,6 +11,7 @@ interface DutyStatusControlProps {
   maxDrivingHours: number;
   onDutyHours: number;
   maxOnDutyHours: number;
+  cycleHours: number;
   buttonStyles?: {
     driving: string;
     onDuty: string;
@@ -32,6 +33,7 @@ const DutyStatusControl: React.FC<DutyStatusControlProps> = ({
   maxDrivingHours,
   onDutyHours,
   maxOnDutyHours,
+  cycleHours,
   buttonStyles = {
     driving: 'bg-green-600 hover:bg-green-300 text-white ',
     onDuty: 'bg-yellow-600 hover:bg-yellow-300 text-white',
@@ -51,8 +53,14 @@ const DutyStatusControl: React.FC<DutyStatusControlProps> = ({
 
   return (
     <div className="space-y-6">
-      <h3 className="text-lg font-semibold mb-4">Duty Status</h3>
-      <div className="grid grid-cols-2 md:grid-cols-1 gap-4">
+      <div className="flex justify-between items-center">
+        <h3 className="text-lg font-semibold">Duty Status</h3>
+        <div className="text-sm text-gray-600">
+          Cycle Hours: <span className="font-medium">{cycleHours.toFixed(1)}</span>
+        </div>
+      </div>
+      
+      <div className=" grid grid-cols-2 gap-4">
         <button
           onClick={() => onStatusChange('driving')}
           disabled={drivingHours >= maxDrivingHours}

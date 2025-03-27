@@ -279,7 +279,7 @@ const TripExecution: React.FC = () => {
       } else {
         // Trip completed
         await dispatch(completeTrip(tripId)).unwrap();
-        navigate('/trips');
+        navigate('/dashboard');
       }
     } catch (error) {
       console.error('Failed to skip stop:', error);
@@ -403,54 +403,150 @@ const TripExecution: React.FC = () => {
   const currentStop = trip.stops[currentStopIndex];
 
   return (
-    <div className="container mx-auto p-4 space-y-8">
-      {/* Trip Status Banner */}
-      <div className="bg-white rounded-lg shadow-lg p-4">
-        <div className="flex justify-between items-center">
-          <div>
-            <h2 className="text-xl font-bold">Trip Status: {tripStatus}</h2>
-            <p className="text-sm text-gray-600">
-              Trip ID: {trip.id} | Current Stop: {currentStopIndex + 1} of {trip.stops.length}
-            </p>
+    <div className="max-w-7xl mx-auto p-6 space-y-6">
+      {/* Header Section */}
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-3xl font-bold text-gray-900">Live Trip</h1>
+          <p className="text-gray-500 mt-1">Track and manage your trip in real-time</p>
+        </div>
+        {tripStatus === 'not_started' && (
+          <button
+            onClick={handleStartTrip}
+            className="bg-green-600 text-white px-6 py-2 rounded-lg hover:bg-green-700 transition-colors flex items-center gap-2"
+          >
+            <FaTruck className="w-5 h-5" />
+            Start Trip
+          </button>
+        )}
+      </div>
+
+      {/* Status Banner */}
+      <div className="bg-white rounded-lg shadow-sm p-6">
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+          <div className="space-y-1">
+            <p className="text-sm text-gray-500">Trip Status</p>
+            <p className="text-lg font-semibold text-gray-900">{tripStatus.toUpperCase()}</p>
           </div>
-          {tripStatus === 'not_started' && (
-            <button
-              onClick={handleStartTrip}
-              className="bg-green-600 text-white px-6 py-2 rounded-lg hover:bg-green-700 flex items-center gap-2"
-            >
-              <FaTruck className="w-5 h-5" />
-              Start Trip
-            </button>
-          )}
+          <div className="space-y-1">
+            <p className="text-sm text-gray-500">Current Stop</p>
+            <p className="text-lg font-semibold text-gray-900">{currentStopIndex + 1} of {trip.stops.length}</p>
+          </div>
+          <div className="space-y-1">
+            <p className="text-sm text-gray-500">Cycle Hours</p>
+            <p className="text-lg font-semibold text-gray-900">{cycleHours.toFixed(1)}</p>
+          </div>
+          <div className="space-y-1">
+            <p className="text-sm text-gray-500">Trip ID</p>
+            <p className="text-lg font-semibold text-gray-900">#{trip.id}</p>
+          </div>
         </div>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Map Section */}
-        <div className="bg-white rounded-lg shadow-lg p-4 col-span-2">
-          <h2 className="text-xl font-bold mb-4">Trip Progress</h2>
-          <TripMap
-            currentLocation={currentLocation || trip.current_location}
-            route={trip.route}
-            stops={trip.stops || []}
-            currentStopIndex={currentStopIndex}
-            tripStatus={tripStatus}
-          />
+        <div className="lg:col-span-2 bg-white rounded-lg shadow-sm overflow-hidden">
+          <div className="h-[600px]">
+            <TripMap
+              currentLocation={currentLocation || trip.current_location}
+              route={trip.route}
+              stops={trip.stops || []}
+              currentStopIndex={currentStopIndex}
+              tripStatus={tripStatus}
+            />
+          </div>
         </div>
 
-        {/* Stops List Section */}
-        <div className="bg-white rounded-lg shadow-lg p-4 lg:col-span-2">
+        {/* Current Stop Card */}
+        <div className="bg-white rounded-lg shadow-sm p-6">
+          <h2 className="text-xl font-semibold text-gray-900 mb-4">Current Stop</h2>
+          <div className="space-y-4">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-full bg-blue-100 flex items-center justify-center">
+                  {createStopIcon(currentStop.stop_type)}
+                </div>
+                <div>
+                  <h3 className="font-medium text-gray-900">{getStopTitle(currentStop.stop_type)}</h3>
+                  <p className="text-sm text-gray-500">Stop {currentStopIndex + 1}</p>
+                </div>
+              </div>
+              <span className={`px-3 py-1 rounded-full text-sm font-medium ${
+                currentStop.status === 'completed' ? 'bg-green-100 text-green-800' :
+                currentStop.status === 'skipped' ? 'bg-red-100 text-red-800' :
+                'bg-blue-100 text-blue-800'
+              }`}>
+                {currentStop.status.toUpperCase()}
+              </span>
+            </div>
+            
+            <div className="space-y-2">
+              <div className="flex items-center justify-between text-sm">
+                <span className="text-gray-500">Arrival Time</span>
+                <span className="font-medium">{new Date(currentStop.arrival_time).toLocaleString()}</span>
+              </div>
+              {currentStop.distance_from_last_stop > 0 && (
+                <div className="flex items-center justify-between text-sm">
+                  <span className="text-gray-500">Distance</span>
+                  <span className="font-medium">{currentStop.distance_from_last_stop.toFixed(1)} miles</span>
+                </div>
+              )}
+            </div>
+
+            {currentStopIndex === currentStopIndex && (
+              <StopStatusUpdate
+                stop={currentStop}
+                isWithinRange={isWithinRange}
+                onConfirm={handleStopConfirmation}
+                onSkip={handleSkipStop}
+                timeRemaining={timeRemaining}
+                isUpdating={isUpdating}
+              />
+            )}
+          </div>
+          {/* Duty Status Control */}
+        {/* <div className="lg:col-span-2 bg-white rounded-lg shadow-sm p-6"> */}
+          <h2 className="text-xl font-semibold text-gray-900 mb-4">Duty Status</h2>
+          <DutyStatusControl
+            currentStatus={currentStatus}
+            onStatusChange={handleStatusChange}
+            drivingHours={drivingHours}
+            maxDrivingHours={11}
+            onDutyHours={onDutyHours}
+            maxOnDutyHours={14}
+            cycleHours={cycleHours}
+            buttonStyles={{
+              driving: "bg-green-600 hover:bg-green-700",
+              onDuty: "bg-yellow-600 hover:bg-yellow-700",
+              sleeper: "bg-blue-600 hover:bg-blue-700",
+              offDuty: "bg-gray-600 hover:bg-gray-700"
+            }}
+            buttonIcons={{
+              driving: <FaTruck className="w-5 h-5" />,
+              onDuty: <MdLocationOn className="w-5 h-5" />,
+              sleeper: <FaBed className="w-5 h-5" />,
+              offDuty: <FaTimes className="w-5 h-5" />
+            }}
+          />
+        {/* </div> */}
+        </div>
+
+        
+
+        {/* Stops List */}
+        <div className="bg-white rounded-lg shadow-sm p-6">
           <div className="flex justify-between items-center mb-4">
-            <h2 className="text-xl font-bold">Stops</h2>
+            <h2 className="text-xl font-semibold text-gray-900">Stops</h2>
             <button
               onClick={handleCreateStop}
               disabled={isUpdating || tripStatus !== 'in_progress'}
-              className="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed"
+              className="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
             >
+              <FaBed className="w-4 h-4" />
               Add Rest Stop
             </button>
           </div>
-          <div className="space-y-4 overflow-y-auto max-h-[500px]">
+          <div className="space-y-3 max-h-[400px] overflow-y-auto">
             {trip.stops.map((stop, index) => (
               <div
                 key={stop.id}
@@ -465,20 +561,17 @@ const TripExecution: React.FC = () => {
                 }`}
               >
                 <div className="flex justify-between items-start">
-                  <div>
-                    <h3 className="font-semibold">{getStopTitle(stop.stop_type)}</h3>
-                    <p className="text-sm text-gray-600">
-                      Arrival: {new Date(stop.arrival_time).toLocaleString()}
-                    </p>
-                    {stop.distance_from_last_stop > 0 && (
-                      <p className="text-sm text-gray-600">
-                        Distance: {stop.distance_from_last_stop.toFixed(1)} miles
-                      </p>
-                    )}
+                  <div className="flex items-center gap-3">
+                    <div className="w-8 h-8 rounded-full bg-gray-100 flex items-center justify-center">
+                      {createStopIcon(stop.stop_type)}
+                    </div>
+                    <div>
+                      <h3 className="font-medium text-gray-900">{getStopTitle(stop.stop_type)}</h3>
+                      <p className="text-sm text-gray-500">Stop {index + 1}</p>
+                    </div>
                   </div>
-                  
                   <div className="flex items-center gap-2">
-                    <span className={`px-2 py-1 rounded text-sm ${
+                    <span className={`px-2 py-1 rounded text-sm font-medium ${
                       stop.status === 'completed'
                         ? 'bg-green-100 text-green-800'
                         : stop.status === 'skipped'
@@ -493,106 +586,75 @@ const TripExecution: React.FC = () => {
                         disabled={isUpdating}
                         className="text-red-600 hover:text-red-800 disabled:opacity-50"
                       >
-                        Delete
+                        <FaTimes className="w-4 h-4" />
                       </button>
                     )}
                   </div>
                 </div>
-                {currentStopIndex === index && <StopStatusUpdate
-                  stop={stop}
-                  isWithinRange={isWithinRange}
-                  onConfirm={handleStopConfirmation}
-                  onSkip={handleSkipStop}
-                  timeRemaining={timeRemaining}
-                  isUpdating={isUpdating}
-                />}
               </div>
             ))}
           </div>
         </div>
 
-        
-        {/* Duty Status Section */}
-        <div className="bg-white rounded-lg shadow-lg p-4 lg:col-span-2">
-          <DutyStatusControl
-            currentStatus={currentStatus}
-            onStatusChange={handleStatusChange}
-            drivingHours={drivingHours}
-            maxDrivingHours={11}
-            onDutyHours={onDutyHours}
-            maxOnDutyHours={14}
-            buttonStyles={{
-              driving: "bg-green-600 hover:bg-green-700",
-              onDuty: "bg-yellow-600 hover:bg-yellow-700",
-              sleeper: "bg-blue-600 hover:bg-blue-700",
-              offDuty: "bg-gray-600 hover:bg-gray-700"
-            }}
-            buttonIcons={{
-              driving: <FaTruck className="w-5 h-5" />,
-              onDuty: <MdLocationOn className="w-5 h-5" />,
-              sleeper: <FaBed className="w-5 h-5" />,
-              offDuty: <FaTimes className="w-5 h-5" />
-            }}
-          />
+        {/* Status Logs */}
+        <div className="bg-white rounded-lg shadow-sm p-6">
+          <h2 className="text-xl font-semibold text-gray-900 mb-4">Recent Status Changes</h2>
+          <div className="space-y-2 max-h-[300px] overflow-y-auto">
+            {statusLogs.map((log, index) => (
+              <div key={index} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                <div className="flex items-center gap-3">
+                  <span className={`px-2 py-1 rounded text-sm font-medium ${
+                    log.status === 'driving' ? 'bg-green-100 text-green-800' :
+                    log.status === 'onDuty' ? 'bg-yellow-100 text-yellow-800' :
+                    log.status === 'sleeper' ? 'bg-blue-100 text-blue-800' :
+                    'bg-gray-100 text-gray-800'
+                  }`}>
+                    {log.status.toUpperCase()}
+                  </span>
+                  <span className="text-sm text-gray-500">
+                    {new Date(log.timestamp).toLocaleTimeString()}
+                  </span>
+                </div>
+              </div>
+            ))}
+          </div>
         </div>
 
-        
-      </div>
-
-      {/* Add Status Logs Section */}
-      <div className="bg-white rounded-lg shadow-lg p-4">
-        <h2 className="text-xl font-bold mb-4">Recent Status Changes</h2>
-        <div className="space-y-2 max-h-[300px] overflow-y-auto">
-          {statusLogs.map((log, index) => (
-            <div key={index} className="flex items-center justify-between p-2 bg-gray-50 rounded">
-              <div className="flex items-center space-x-2">
-                <span className={`px-2 py-1 rounded text-sm ${
-                  log.status === 'driving' ? 'bg-green-100 text-green-800' :
-                  log.status === 'onDuty' ? 'bg-yellow-100 text-yellow-800' :
-                  log.status === 'sleeper' ? 'bg-blue-100 text-blue-800' :
-                  'bg-gray-100 text-gray-800'
-                }`}>
-                  {log.status.toUpperCase()}
-                </span>
+        {/* Trip Logs */}
+        <div className="bg-white rounded-lg shadow-sm p-6">
+          <h2 className="text-xl font-semibold text-gray-900 mb-4">Trip Logs</h2>
+          <div className="space-y-2 max-h-[300px] overflow-y-auto">
+            {trip?.log_sheets?.map((log: LogSheet) => (
+              <div key={log.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                <div className="flex items-center gap-3">
+                  <span className={`px-2 py-1 rounded text-sm font-medium ${
+                    log.status === 'active' ? 'bg-green-100 text-green-800' :
+                    log.status === 'completed' ? 'bg-blue-100 text-blue-800' :
+                    'bg-gray-100 text-gray-800'
+                  }`}>
+                    {log.status.toUpperCase()}
+                  </span>
+                  <div className="text-sm text-gray-600">
+                    <div>{new Date(log.start_time).toLocaleString()}</div>
+                    {log.end_time && (
+                      <div className="text-gray-500">→ {new Date(log.end_time).toLocaleString()}</div>
+                    )}
+                  </div>
+                </div>
+                <div className="text-sm text-gray-500">
+                  <div>Cycle Hours: {log.start_cycle_hours}</div>
+                  {log.end_cycle_hours && (
+                    <div>→ {log.end_cycle_hours.toFixed(1)}</div>
+                  )}
+                </div>
               </div>
-              <span className="text-sm text-gray-500">
-                {new Date(log.timestamp).toLocaleTimeString()}
-              </span>
-            </div>
-          ))}
-        </div>
-      </div>
-
-      {/* Trip Logs Section */}
-      <div className="bg-white rounded-lg shadow-lg p-4">
-        <h2 className="text-xl font-bold mb-4">Trip Logs</h2>
-        <div className="space-y-2 max-h-[300px] overflow-y-auto">
-          {trip?.log_sheets?.map((log: LogSheet) => (
-            <div key={log.id} className="flex items-center justify-between p-2 bg-gray-50 rounded">
-              <div className="flex items-center space-x-2">
-                <span className={`px-2 py-1 rounded text-sm ${
-                  log.status === 'active' ? 'bg-green-100 text-green-800' :
-                  log.status === 'completed' ? 'bg-blue-100 text-blue-800' :
-                  'bg-gray-100 text-gray-800'
-                }`}>
-                  {log.status.toUpperCase()}
-                </span>
-                <span className="text-sm text-gray-600">
-                  {new Date(log.start_time).toLocaleString()}
-                  {log.end_time && ` → ${new Date(log.end_time).toLocaleString()}`}
-                </span>
+            ))}
+            {(!trip?.log_sheets || trip.log_sheets.length === 0) && (
+              <div className="text-center text-gray-500 py-4">
+                No logs available for this trip
               </div>
-              <div className="text-sm text-gray-500">
-                <span>Cycle Hours: {log.start_cycle_hours}</span>
-                {log.end_cycle_hours && ` → ${log.end_cycle_hours}`}
-              </div>
-            </div>
-          ))}
-          {(!trip?.log_sheets || trip.log_sheets.length === 0) && (
-            <div className="text-center text-gray-500 py-4">
-              No logs available for this trip
-            </div>
-          )}
+            )}
+          </div>
         </div>
       </div>
     </div>
@@ -611,6 +673,21 @@ const getStopTitle = (stopType: Stop['stop_type']) => {
       return 'Fuel Stop';
     default:
       return 'Stop';
+  }
+};
+
+const createStopIcon = (stopType: Stop['stop_type']) => {
+  switch (stopType) {
+    case 'pickup':
+      return <FaTruck className="w-5 h-5" />;
+    case 'dropoff':
+      return <FaBed className="w-5 h-5" />;
+    case 'rest':
+      return <FaBed className="w-5 h-5" />;
+    case 'fuel':
+      return <FaTruck className="w-5 h-5" />;
+    default:
+      return <FaTruck className="w-5 h-5" />;
   }
 };
 

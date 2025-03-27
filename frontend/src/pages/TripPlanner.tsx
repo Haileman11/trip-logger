@@ -29,7 +29,7 @@ import { Button } from "@/components/ui/button";
 import { useNavigate } from "react-router-dom";
 import { useAppDispatch } from "@/hooks/useAppDispatch";
 import { useAppSelector } from "@/hooks/useAppSelector";
-import type { Location, LocationInputModel } from "@/types";
+import type { Location, LocationInputModel, LogSheet } from "@/types";
 
 import { leafletIcons } from "../utils/leaflet-icons";
 
@@ -224,7 +224,7 @@ const TripPlanner = () => {
         });
         if (!response.ok) throw new Error('Failed to fetch logs');
         
-        const logs = await response.json();
+        const logs = await response.json() as LogSheet[];
         if (logs && logs.length > 0) {
           // Find the most recent completed log
           const latestCompletedLog = logs
@@ -232,7 +232,11 @@ const TripPlanner = () => {
             .sort((a: any, b: any) => new Date(b.end_time).getTime() - new Date(a.end_time).getTime())[0];
           
           if (latestCompletedLog) {
-            setLatestCycleHours(latestCompletedLog.end_cycle_hours);
+            const endTime = new Date(latestCompletedLog.end_time!);
+            const timeDifference =  new Date().getTime() - endTime.getTime();
+            const hoursDifference = timeDifference / (1000 * 60 * 60);
+            const cycleHours = latestCompletedLog.end_cycle_hours! > hoursDifference ? latestCompletedLog.end_cycle_hours!-hoursDifference : 0;
+            setLatestCycleHours(cycleHours);
           }
         }
       } catch (error) {
@@ -768,12 +772,21 @@ const LocationInput = ({
             onChange={(e) => onChange(index, "longitude", e.target.value)}
           />
         </div>
-        <div>
+        <div className="flex gap-2">
           <button
             className="flex items-center justify-center px-4 py-2 border border-yellow-500 text-yellow-600 rounded-md hover:bg-yellow-50"
             onClick={() => onSelect(location.slug)}
           >
             Select on Map
+          </button>
+          <button
+            className="flex items-center justify-center px-4 py-2 border border-red-500 text-red-600 rounded-md hover:bg-red-50"
+            onClick={() => {
+              onChange(index, "latitude", "0");
+              onChange(index, "longitude", "0");
+            }}
+          >
+            Reset
           </button>
         </div>
       </div>

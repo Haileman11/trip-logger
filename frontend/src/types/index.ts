@@ -76,6 +76,7 @@ export interface Route {
     duration: number;
     legs: RouteLeg[];
   }>;
+  waypoints: {name:string}[]
   code?: string;
   message?: string;
 }
