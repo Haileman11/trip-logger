@@ -15,7 +15,7 @@ import TripPlanner from "./pages/TripPlanner";
 
 import { SignUp } from "./pages/SignUp";
 import { Login } from "./pages/Login";
-import { LandingPage } from "./pages/LandingPage";
+import  LandingPage  from "./pages/LandingPage";
 import TripExecution from "./pages/TripExecution";
 import TripsList from "./pages/TripsList";
 import LogsList from "./pages/LogsList";

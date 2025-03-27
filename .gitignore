@@ -11,3 +11,5 @@ dist
 dist-ssr
 *.local
 backend/venv/pyvenv.cfg
+.vercel
+backend/.venv/
