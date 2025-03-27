@@ -2,6 +2,7 @@ import { createSlice, createAsyncThunk } from "@reduxjs/toolkit";
 import axios from "axios";
 import { LogSheet } from "../../types";
 import { apiRequest } from "../../utils/api";
+import { API_BASE_URL } from "@/config/api";
 
 const API_URL = import.meta.env.VITE_API_URL || "";
 
@@ -62,6 +63,26 @@ export const updateLogSheet = createAsyncThunk(
     return response.data;
   }
 );
+export const fetchLatestCycleHours = createAsyncThunk("logs", async () => {
+  try {
+    const response = await apiRequest(`${API_BASE_URL}/api/log-sheets`);
+    const logs = (await response.data) as LogSheet[];
+    console.log(logs);
+    if (logs && logs.length > 0) {
+      // Find the most recent completed log
+      const latestCompletedLog = logs
+        .filter((log: any) => log.status === "completed")
+        .sort(
+          (a: any, b: any) =>
+            new Date(b.end_time).getTime() - new Date(a.end_time).getTime()
+        )[0];
+      console.log(latestCompletedLog);
+      return latestCompletedLog.end_cycle_hours;
+    }
+  } catch (error) {
+    console.error("Error fetching latest cycle hours:", error);
+  }
+});
 
 const logSlice = createSlice({
   name: "log",
