@@ -54,7 +54,7 @@ const StopStatusUpdate: React.FC<StopStatusUpdateProps> = ({
         </div>
       </div>
 
-      {stop.distance_from_last_stop && (
+      {stop.distance_from_last_stop !== 0 && (
         <div className="text-sm text-gray-600">
           Distance from last stop: {Math.round(stop.distance_from_last_stop)} miles
         </div>
