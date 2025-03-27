@@ -39,6 +39,7 @@ const TripExecution: React.FC = () => {
   const [tripStatus, setTripStatus] = useState<TripStatus>('not_started');
   const [drivingHours, setDrivingHours] = useState(0);
   const [onDutyHours, setOnDutyHours] = useState(0);
+  const [cycleHours, setCycleHours] = useState(0);
   const [statusLogs, setStatusLogs] = useState<StatusLog[]>([]);
   const [currentStopIndex, setCurrentStopIndex] = useState(0);
   const [isWithinRange, setIsWithinRange] = useState(false);
@@ -58,6 +59,18 @@ const TripExecution: React.FC = () => {
           setTripStatus(result.status === 'completed' ? 'completed' : result.status === 'in_progress' ? 'in_progress' : 'not_started');
           setTrip(result);
           setCurrentStopIndex(result.stops.findIndex(stop => stop.status !== 'completed'));
+
+          // Set initial duty status and cycle hours from latest log
+          const activeLog = result.log_sheets.find(log => log.status === 'active');
+          if (activeLog) {
+            if (activeLog.duty_status_changes && activeLog.duty_status_changes.length > 0) {
+              const latestStatus = activeLog.duty_status_changes[activeLog.duty_status_changes.length - 1];
+              setCurrentStatus(latestStatus.status);
+            }
+            // Set cycle hours from the active log
+            setCycleHours(activeLog.start_cycle_hours || 0);
+          }
+
           // Plan route if trip is in planned status and has no route
           if (result.status === 'planned' && !result.route) {
             await dispatch(planRoute(parseInt(tripId))).unwrap();
@@ -71,19 +84,19 @@ const TripExecution: React.FC = () => {
     fetchTripData();
   }, [tripId, dispatch]);
 
-  // Initialize current location
-  // useEffect(() => {
-  //   if (trip?.route?.routes?.[0]?.geometry?.coordinates) {
-  //     const coordinates = trip.route.routes[0].geometry.coordinates;
-  //     if (coordinates.length > 0) {
-  //       const [lng, lat] = coordinates[0];
-  //       setCurrentLocation({
-  //         latitude: lat,
-  //         longitude: lng
-  //       });
-  //     }
-  //   }
-  // }, [trip]);
+  // Update stop status when duty status changes to driving
+  useEffect(() => {
+    if (trip && currentStatus === 'driving' && trip.stops[currentStopIndex]) {
+      const currentStop = trip.stops[currentStopIndex];
+      if (currentStop.status === 'pending') {
+        dispatch(updateStopStatus({
+          tripId: trip.id.toString(),
+          stopId: currentStop.id,
+          status: 'in_progress'
+        })).unwrap();
+      }
+    }
+  }, [currentStatus, currentStopIndex, trip, dispatch]);
 
   // Update the useEffect that handles location updates
   useEffect(() => {
@@ -136,11 +149,6 @@ const TripExecution: React.FC = () => {
               const currentStop = trip.stops[currentStopIndex];
               const distance = calculateDistance(updatedLocation, currentStop.location);
               setIsWithinRange(distance <= 0.5); // Within 0.5 miles
-              
-              // If within range and status is driving, change to on_duty
-              if (isWithinRange && currentStatus === 'driving') {
-                handleStatusChange('onDuty');
-              }
             }
           }
         }
@@ -158,6 +166,17 @@ const TripExecution: React.FC = () => {
         setOnDutyHours(prev => prev + 1/3600);
       } else if (currentStatus === 'onDuty') {
         setOnDutyHours(prev => prev + 1/3600);
+      }
+    }, 1000);
+
+    return () => clearInterval(interval);
+  }, [currentStatus]);
+
+  // Update cycle hours when duty status changes
+  useEffect(() => {
+    const interval = setInterval(() => {
+      if (currentStatus === 'driving' || currentStatus === 'onDuty') {
+        setCycleHours(prev => prev + 1/3600); // Increment by 1 second
       }
     }, 1000);
 

@@ -209,6 +209,40 @@ const TripPlanner = () => {
   const dispatch = useAppDispatch();
   const navigate = useNavigate();
   const { greenIcon, redIcon, defaultIcon, yellowIcon } = leafletIcons;
+
+  // Add state for latest cycle hours
+  const [latestCycleHours, setLatestCycleHours] = useState<number | null>(null);
+
+  // Add useEffect to fetch latest cycle hours
+  useEffect(() => {
+    const fetchLatestCycleHours = async () => {
+      try {
+        const response = await fetch('/api/logs/all/', {
+          headers: {
+            'Authorization': `Bearer ${localStorage.getItem('access_token')}`
+          }
+        });
+        if (!response.ok) throw new Error('Failed to fetch logs');
+        
+        const logs = await response.json();
+        if (logs && logs.length > 0) {
+          // Find the most recent completed log
+          const latestCompletedLog = logs
+            .filter((log: any) => log.status === 'completed')
+            .sort((a: any, b: any) => new Date(b.end_time).getTime() - new Date(a.end_time).getTime())[0];
+          
+          if (latestCompletedLog) {
+            setLatestCycleHours(latestCompletedLog.end_cycle_hours);
+          }
+        }
+      } catch (error) {
+        console.error('Error fetching latest cycle hours:', error);
+      }
+    };
+
+    fetchLatestCycleHours();
+  }, []);
+
   function createStopIcon(stopType: string) {
     switch (stopType) {
       case "pickup":
@@ -261,9 +295,19 @@ const TripPlanner = () => {
         longitude: 0,
       },
     ],
-
-    currentCycleHours: 0,
+    currentCycleHours: latestCycleHours || 0,
   });
+
+  // Update formState when latestCycleHours changes
+  useEffect(() => {
+    if (latestCycleHours !== null) {
+      setFormState(prev => ({
+        ...prev,
+        currentCycleHours: latestCycleHours
+      }));
+    }
+  }, [latestCycleHours]);
+
   const handleOnDragEnd = (result: any) => {
     const { source, destination } = result;
 

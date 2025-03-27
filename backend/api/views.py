@@ -87,11 +87,13 @@ class TripViewSet(viewsets.ModelViewSet):
     def get_queryset(self):
         trip_id = self.kwargs.get("trip_pk")
         if trip_id:
-            return Trip.objects.filter(trip_id=trip_id).prefetch_related('log_sheets')
-        return Trip.objects.all().order_by("-created_at").prefetch_related('log_sheets')
-
-    # def get_queryset(self):
-    # return Trip.objects.filter(created_by=self.request.user)
+            return Trip.objects.filter(
+                id=trip_id,
+                created_by=self.request.user
+            ).prefetch_related('log_sheets')
+        return Trip.objects.filter(
+            created_by=self.request.user
+        ).order_by("-created_at").prefetch_related('log_sheets')
 
     def perform_create(self, serializer):
         serializer.save(created_by=self.request.user)
@@ -529,6 +531,29 @@ class TripViewSet(viewsets.ModelViewSet):
             trip = self.get_object()
             print(f"Starting trip: {trip.id}")
 
+            # Check for any existing active trips for this user
+            active_trips = Trip.objects.filter(
+                created_by=request.user,
+                status="in_progress"
+            ).exclude(id=trip.id)
+
+            # Complete any existing active trips
+            for active_trip in active_trips:
+                active_trip.status = "completed"
+                active_trip.save()
+                
+                # Update all remaining stops to completed
+                active_trip.stops.filter(status="pending").update(status="completed")
+                
+                # Complete any active log sheets
+                active_log = active_trip.log_sheets.filter(status="active").first()
+                if active_log:
+                    active_log.end_time = timezone.now()
+                    active_log.end_location = active_trip.current_location
+                    active_log.end_cycle_hours = active_trip.current_cycle_hours
+                    active_log.status = "completed"
+                    active_log.save()
+
             # Update trip status
             trip.status = "in_progress"
             trip.save()
@@ -788,14 +813,25 @@ class LogSheetViewSet(viewsets.ModelViewSet):
         trip_id = self.kwargs.get("trip_pk")
         if trip_id == "all":
             # Return all logs for the current user's trips
-            return LogSheet.objects.filter(trip__created_by=self.request.user).order_by("-created_at")
+            return LogSheet.objects.filter(
+                trip__created_by=self.request.user
+            ).order_by("-created_at")
         elif trip_id:
             # Return logs for a specific trip, ensuring the user has access
-            return LogSheet.objects.filter(trip_id=trip_id, trip__created_by=self.request.user)
-        return LogSheet.objects.filter(trip__created_by=self.request.user).order_by("-created_at")
+            return LogSheet.objects.filter(
+                trip_id=trip_id,
+                trip__created_by=self.request.user
+            )
+        return LogSheet.objects.filter(
+            trip__created_by=self.request.user
+        ).order_by("-created_at")
 
     def perform_create(self, serializer):
-        trip = get_object_or_404(Trip, pk=self.kwargs.get("trip_pk"))
+        trip = get_object_or_404(
+            Trip, 
+            pk=self.kwargs.get("trip_pk"),
+            created_by=self.request.user  # Ensure user owns the trip
+        )
         
         # Validate that we're not creating overlapping logs
         start_time = serializer.validated_data.get('start_time')
@@ -817,6 +853,10 @@ class LogSheetViewSet(viewsets.ModelViewSet):
         serializer.save(trip=trip)
 
     def perform_update(self, serializer):
+        # Ensure user owns the log's trip
+        if serializer.instance.trip.created_by != self.request.user:
+            raise serializers.ValidationError("You can only update your own logs")
+            
         # Validate that we're not creating overlapping logs
         start_time = serializer.validated_data.get('start_time')
         end_time = serializer.validated_data.get('end_time')
@@ -839,6 +879,13 @@ class LogSheetViewSet(viewsets.ModelViewSet):
     @action(detail=True, methods=['post'])
     def duty_status_change(self, request, pk=None):
         log_sheet = self.get_object()
+        # Ensure user owns the log's trip
+        if log_sheet.trip.created_by != request.user:
+            return Response(
+                {"error": "You can only modify your own logs"},
+                status=status.HTTP_403_FORBIDDEN
+            )
+            
         serializer = DutyStatusChangeCreateSerializer(data=request.data)
         
         if serializer.is_valid():

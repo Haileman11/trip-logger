@@ -161,10 +161,42 @@ const TripDetails = () => {
   }
   function handleStartTrip(event: React.MouseEvent<HTMLButtonElement>): void {
     console.log("Starting trip");
-    dispatch(startTrip(tripId!));
-    console.log("Trip started");
-    console.log(trip);
-    navigate("/trip/" + tripId + "/live");
+    
+    // First check if there are any active trips
+    const checkActiveTrips = async () => {
+      try {
+        const response = await fetch('/api/trips/', {
+          headers: {
+            'Authorization': `Bearer ${localStorage.getItem('access_token')}`
+          }
+        });
+        
+        if (!response.ok) throw new Error('Failed to fetch trips');
+        
+        const trips = await response.json();
+        const activeTrips = trips.filter((trip: any) => trip.status === 'in_progress');
+        
+        if (activeTrips.length > 0) {
+          // Show warning to user
+          if (window.confirm('You already have an active trip. Starting this trip will complete the active trip. Do you want to continue?')) {
+            // User confirmed, proceed with starting the trip
+            dispatch(startTrip(tripId!));
+            navigate("/trip/" + tripId + "/live");
+          }
+        } else {
+          // No active trips, proceed normally
+          dispatch(startTrip(tripId!));
+          navigate("/trip/" + tripId + "/live");
+        }
+      } catch (error) {
+        console.error('Error checking active trips:', error);
+        // If there's an error checking active trips, proceed with starting the trip
+        dispatch(startTrip(tripId!));
+        navigate("/trip/" + tripId + "/live");
+      }
+    };
+
+    checkActiveTrips();
   }
 
   return (
