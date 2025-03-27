@@ -1,8 +1,6 @@
 import { DragDropContext, Droppable, Draggable } from "react-beautiful-dnd";
 import { useState, useEffect } from "react";
-import { useDispatch, useSelector } from "react-redux";
-import { createTrip, planRoute } from "../store/slices/tripSlice";
-import type { RootState, AppDispatch } from "../store";
+import { createTrip } from "../store/slices/tripSlice";
 import {
   MapContainer,
   TileLayer,
@@ -12,9 +10,7 @@ import {
   useMap,
   Polyline,
 } from "react-leaflet";
-import { FaTruck, FaGasPump, FaBed, FaCheck, FaTimes } from "react-icons/fa";
-import { BiTimeFive } from "react-icons/bi";
-import { MdLocationOn, MdLocalGasStation } from "react-icons/md";
+import { MdLocationOn } from "react-icons/md";
 import "leaflet/dist/leaflet.css";
 import L from "leaflet";
 import { DialogDescription } from "@radix-ui/react-dialog";
@@ -22,16 +18,15 @@ import { DialogHeader } from "@/components/ui/dialog";
 import { DialogContent } from "@/components/ui/dialog";
 import { Dialog } from "@radix-ui/react-dialog";
 import { DialogTitle } from "@radix-ui/react-dialog";
-import { DialogTrigger } from "@/components/ui/dialog";
 import React from "react";
 import { DialogFooter } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { useNavigate } from "react-router-dom";
 import { useAppDispatch } from "@/hooks/useAppDispatch";
-import { useAppSelector } from "@/hooks/useAppSelector";
-import type { Location, LocationInputModel, LogSheet } from "@/types";
+import type { LocationInputModel, LogSheet } from "@/types";
 
 import { leafletIcons } from "../utils/leaflet-icons";
+import { fetchLatestCycleHours } from "@/store/slices/logSlice";
 
 const LocationMarker = React.forwardRef<
   L.Marker,
@@ -108,44 +103,11 @@ const BoundsUpdater = ({
 
   return null;
 };
-// Add interfaces for type safety
-interface TimelineEntry {
-  type:
-    | "start"
-    | "pickup"
-    | "dropoff"
-    | "fuel"
-    | "rest"
-    | "waypoint"
-    | "location";
-  location: string;
-  time: string;
-  index: number;
-}
-
-interface RouteData {
-  timeline: TimelineEntry[];
-  eldLogs: {
-    drivingTime: string;
-    onDuty: string;
-    restTime: string;
-  };
-  summary: {
-    totalDistance: string;
-    estimatedDuration: string;
-    fuelStops: number;
-    restStops: number;
-  };
-}
 
 // Update interfaces to include GeoJSON types
 interface GeoJSONLineString {
   type: "LineString";
   coordinates: [number, number][];
-}
-
-interface GeoJSONGeometry {
-  geometry: GeoJSONLineString;
 }
 
 // Remove the polyline decoder as we don't need it anymore
@@ -215,36 +177,13 @@ const TripPlanner = () => {
 
   // Add useEffect to fetch latest cycle hours
   useEffect(() => {
-    const fetchLatestCycleHours = async () => {
-      try {
-        const response = await fetch('/api/logs/all/', {
-          headers: {
-            'Authorization': `Bearer ${localStorage.getItem('access_token')}`
-          }
-        });
-        if (!response.ok) throw new Error('Failed to fetch logs');
-        
-        const logs = await response.json() as LogSheet[];
-        if (logs && logs.length > 0) {
-          // Find the most recent completed log
-          const latestCompletedLog = logs
-            .filter((log: any) => log.status === 'completed')
-            .sort((a: any, b: any) => new Date(b.end_time).getTime() - new Date(a.end_time).getTime())[0];
-          
-          if (latestCompletedLog) {
-            const endTime = new Date(latestCompletedLog.end_time!);
-            const timeDifference =  new Date().getTime() - endTime.getTime();
-            const hoursDifference = timeDifference / (1000 * 60 * 60);
-            const cycleHours = latestCompletedLog.end_cycle_hours! > hoursDifference ? latestCompletedLog.end_cycle_hours!-hoursDifference : 0;
-            setLatestCycleHours(cycleHours);
-          }
-        }
-      } catch (error) {
-        console.error('Error fetching latest cycle hours:', error);
-      }
-    };
+    const getLatestCycleHours = async () => {
+      const response = await dispatch(fetchLatestCycleHours()).unwrap();
 
-    fetchLatestCycleHours();
+      setLatestCycleHours(response ?? 0);
+      console.log("Latest Cycle Hours:", response);
+    };
+    getLatestCycleHours();
   }, []);
 
   function createStopIcon(stopType: string) {
@@ -305,9 +244,9 @@ const TripPlanner = () => {
   // Update formState when latestCycleHours changes
   useEffect(() => {
     if (latestCycleHours !== null) {
-      setFormState(prev => ({
+      setFormState((prev) => ({
         ...prev,
-        currentCycleHours: latestCycleHours
+        currentCycleHours: latestCycleHours,
       }));
     }
   }, [latestCycleHours]);
@@ -332,38 +271,10 @@ const TripPlanner = () => {
   const [error, setError] = useState("");
   const [routeGeometry, setRouteGeometry] = useState<any>(null);
   const [isSuccessOpen, setIsSuccessOpen] = useState(false);
-  const [hasFuelStop, setHasFuelStop] = useState(false);
-  const [isFuelStopRequired, setIsFuelStopRequired] = useState(false);
+
   const [activeLocation, setActiveLocation] =
     useState<string>("pickupLocation");
 
-  const [tripData, setTripData] = useState<Trip | null>(null);
-  const [isSelectingFuelStop, setIsSelectingFuelStop] = useState(false);
-  const [routeData, setRouteData] = useState<RouteData>({
-    timeline: [],
-    eldLogs: {
-      drivingTime: "0:00",
-      onDuty: "0:00",
-      restTime: "0:00",
-    },
-    summary: {
-      totalDistance: "0 miles",
-      estimatedDuration: "0h 0m",
-      fuelStops: 0,
-      restStops: 0,
-    },
-  });
-
-  const formatDuration = (seconds: number): string => {
-    const hours = Math.floor(seconds / 3600);
-    const minutes = Math.floor((seconds % 3600) / 60);
-    return `${hours}h ${minutes}m`;
-  };
-
-  const formatDistance = (meters: number): string => {
-    const miles = (meters / 1609.34).toFixed(1);
-    return `${miles} miles`;
-  };
   const updateLocation = ({
     id,
     newLatitude,
@@ -441,6 +352,7 @@ const TripPlanner = () => {
 
   const handleActiveLocationChange = (locationSlug: string) => {
     // Set the active location to the slug of the location being selected
+    console.log(locationSlug);
     setActiveLocation(locationSlug);
   };
 
@@ -585,15 +497,26 @@ const TripPlanner = () => {
               )}
             </MapContainer>
           </div>
-          <p className="p-4 text-sm text-gray-500">
-            {isSelectingFuelStop
-              ? "Click on the map to add a fuel stop location"
-              : "Click on the map to set pickup (green) and dropoff (red) locations. Click on a marker to remove it."}
-          </p>
+          {formState.locations.findIndex(
+            (location) => location.slug === activeLocation
+          ) ==
+            formState.locations.length - 1 && (
+            <p className="p-4 text-sm text-gray-500">
+              Click on the map to set
+              <span className="text-base uppercase">
+                {
+                  formState.locations.find(
+                    (location) => location.slug == activeLocation
+                  )?.title
+                }
+              </span>
+              Click on a marker to remove it.
+            </p>
+          )}
         </div>
       </div>
       {/* Left Column - Form */}
-      {!(tripData && routeData) && (
+      {
         <div className="space-y-6">
           <form
             onSubmit={handleSubmit}
@@ -682,7 +605,7 @@ const TripPlanner = () => {
             </div>
           </form>
         </div>
-      )}
+      }
 
       {/* Success Dialog */}
       <Dialog open={isSuccessOpen} onOpenChange={setIsSuccessOpen}>

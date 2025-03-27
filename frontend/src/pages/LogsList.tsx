@@ -33,7 +33,11 @@ export default function LogsList() {
   const [searchQuery, setSearchQuery] = useState("");
   const [dailyLogs, setDailyLogs] = useState<DailyLogSummary[]>([]);
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
-  const { logSheets = [], loading, error } = useSelector((state: RootState) => state.logs);
+  const {
+    logSheets = [],
+    loading,
+    error,
+  } = useSelector((state: RootState) => state.logs);
 
   useEffect(() => {
     dispatch(fetchLogSheets("all"));
@@ -41,33 +45,39 @@ export default function LogsList() {
 
   useEffect(() => {
     // Group logs by date and calculate summaries
-    const groupedLogs = logSheets.reduce<Record<string, DailyLogSummary>>((acc, log) => {
-      const date = format(parseISO(log.start_time), "yyyy-MM-dd");
-      if (!acc[date]) {
-        acc[date] = {
-          date,
-          totalActiveHours: 0,
-          totalCompletedHours: 0,
-          logs: [],
-          dutyStatusChanges: [],
-        };
-      }
+    const groupedLogs = logSheets.reduce<Record<string, DailyLogSummary>>(
+      (acc, log) => {
+        const date = format(parseISO(log.start_time), "yyyy-MM-dd");
+        if (!acc[date]) {
+          acc[date] = {
+            date,
+            totalActiveHours: 0,
+            totalCompletedHours: 0,
+            logs: [],
+            dutyStatusChanges: [],
+          };
+        }
 
-      // Calculate hours for each status
-      const hours = (new Date(log.end_time || log.start_time).getTime() - new Date(log.start_time).getTime()) / (1000 * 60 * 60);
-      switch (log.status) {
-        case "active":
-          acc[date].totalActiveHours += hours;
-          break;
-        case "completed":
-          acc[date].totalCompletedHours += hours;
-          break;
-      }
+        // Calculate hours for each status
+        const hours =
+          (new Date(log.end_time || log.start_time).getTime() -
+            new Date(log.start_time).getTime()) /
+          (1000 * 60 * 60);
+        switch (log.status) {
+          case "active":
+            acc[date].totalActiveHours += hours;
+            break;
+          case "completed":
+            acc[date].totalCompletedHours += hours;
+            break;
+        }
 
-      acc[date].logs.push(log);
-      acc[date].dutyStatusChanges.push(...log.duty_status_changes);
-      return acc;
-    }, {});
+        acc[date].logs.push(log);
+        acc[date].dutyStatusChanges.push(...log.duty_status_changes);
+        return acc;
+      },
+      {}
+    );
 
     // Sort logs by date in descending order
     const sortedLogs = Object.values(groupedLogs).sort((a, b) => {
@@ -116,7 +126,7 @@ export default function LogsList() {
   }
 
   if (selectedDate) {
-    const selectedLog = dailyLogs.find(log => log.date === selectedDate);
+    const selectedLog = dailyLogs.find((log) => log.date === selectedDate);
     if (!selectedLog) return null;
     console.log(selectedLog);
     const date = parseISO(selectedLog.date);
@@ -124,10 +134,7 @@ export default function LogsList() {
       <div className="container mx-auto py-10">
         <div className="flex justify-between items-center mb-6">
           <h1 className="text-3xl font-bold">Daily Log</h1>
-          <Button
-            variant="outline"
-            onClick={() => setSelectedDate(null)}
-          >
+          <Button variant="outline" onClick={() => setSelectedDate(null)}>
             Back to List
           </Button>
         </div>
@@ -145,7 +152,7 @@ export default function LogsList() {
   }
 
   return (
-    <div className="container mx-auto py-10">
+    <div className="max-w-7xl container mx-auto py-10">
       <div className="flex justify-between items-center mb-6">
         <h1 className="text-3xl font-bold">Daily Logs</h1>
         <div className="flex items-center gap-4">
@@ -195,12 +202,18 @@ export default function LogsList() {
                     {format(parseISO(dailyLog.date), "MMM dd, yyyy")}
                   </TableCell>
                   <TableCell>
-                    <Badge variant="outline" className="bg-green-50 text-green-700">
+                    <Badge
+                      variant="outline"
+                      className="bg-green-50 text-green-700"
+                    >
                       {formatHours(dailyLog.totalActiveHours)}
                     </Badge>
                   </TableCell>
                   <TableCell>
-                    <Badge variant="outline" className="bg-yellow-50 text-yellow-700">
+                    <Badge
+                      variant="outline"
+                      className="bg-yellow-50 text-yellow-700"
+                    >
                       {formatHours(dailyLog.totalCompletedHours)}
                     </Badge>
                   </TableCell>
@@ -222,4 +235,3 @@ export default function LogsList() {
     </div>
   );
 }
-

@@ -88,12 +88,13 @@ class TripViewSet(viewsets.ModelViewSet):
         trip_id = self.kwargs.get("trip_pk")
         if trip_id:
             return Trip.objects.filter(
-                id=trip_id,
-                created_by=self.request.user
-            ).prefetch_related('log_sheets')
-        return Trip.objects.filter(
-            created_by=self.request.user
-        ).order_by("-created_at").prefetch_related('log_sheets')
+                id=trip_id, created_by=self.request.user
+            ).prefetch_related("log_sheets")
+        return (
+            Trip.objects.filter(created_by=self.request.user)
+            .order_by("-created_at")
+            .prefetch_related("log_sheets")
+        )
 
     def perform_create(self, serializer):
         serializer.save(created_by=self.request.user)
@@ -111,19 +112,22 @@ class TripViewSet(viewsets.ModelViewSet):
             validated_data = serializer.validated_data
 
             # Get locations from request data
-            locations_data = validated_data['locations']
-            current_cycle_hours = validated_data['current_cycle_hours']
+            locations_data = validated_data["locations"]
+            current_cycle_hours = validated_data["current_cycle_hours"]
 
             # Create or get locations first
             locations = []
             for location_data in locations_data:
                 # Try to find existing location
                 location, created = Location.objects.get_or_create(
-                    latitude=location_data['latitude'],
-                    longitude=location_data['longitude'],
+                    latitude=location_data["latitude"],
+                    longitude=location_data["longitude"],
                     defaults={
-                        'street_name': location_data.get('street_name', f"Location at {location_data['latitude']}, {location_data['longitude']}")
-                    }
+                        "street_name": location_data.get(
+                            "street_name",
+                            f"Location at {location_data['latitude']}, {location_data['longitude']}",
+                        )
+                    },
                 )
                 locations.append(location)
 
@@ -134,7 +138,7 @@ class TripViewSet(viewsets.ModelViewSet):
                 dropoff_location=locations[2] if len(locations) > 2 else None,
                 fuel_stop=locations[3] if len(locations) > 3 else None,
                 current_cycle_hours=current_cycle_hours,
-                created_by=request.user
+                created_by=request.user,
             )
 
             # Build route coordinates from locations
@@ -146,7 +150,7 @@ class TripViewSet(viewsets.ModelViewSet):
             if not route_coords:
                 return Response(
                     {"error": "No valid coordinates found in locations"},
-                    status=status.HTTP_400_BAD_REQUEST
+                    status=status.HTTP_400_BAD_REQUEST,
                 )
 
             # Get route from OSRM
@@ -183,25 +187,27 @@ class TripViewSet(viewsets.ModelViewSet):
             current_cycle_hours = trip.current_cycle_hours
 
             # Create stops for each location (except current location)
-            for i, (location, location_data) in enumerate(zip(locations[1:], locations_data[1:]), start=1):
+            for i, (location, location_data) in enumerate(
+                zip(locations[1:], locations_data[1:]), start=1
+            ):
                 # Determine stop type based on location slug
-                slug = location_data.get('slug', '')
+                slug = location_data.get("slug", "")
                 print(f"Processing stop {i}:")
                 print(f"Location data: {location_data}")
                 print(f"Location: {location}")
                 print(f"Slug: {slug}")
-                
-                if slug == 'pickupLocation':
-                    stop_type = 'pickup'
+
+                if slug == "pickupLocation":
+                    stop_type = "pickup"
                     duration_minutes = 60
-                elif slug == 'dropoffLocation':
-                    stop_type = 'dropoff'
+                elif slug == "dropoffLocation":
+                    stop_type = "dropoff"
                     duration_minutes = 60
-                elif slug == 'fuelStop':
-                    stop_type = 'fuel'
+                elif slug == "fuelStop":
+                    stop_type = "fuel"
                     duration_minutes = 30
                 else:
-                    stop_type = 'waypoint'
+                    stop_type = "waypoint"
                     duration_minutes = 0
 
                 # Create the stop
@@ -533,18 +539,17 @@ class TripViewSet(viewsets.ModelViewSet):
 
             # Check for any existing active trips for this user
             active_trips = Trip.objects.filter(
-                created_by=request.user,
-                status="in_progress"
+                created_by=request.user, status="in_progress"
             ).exclude(id=trip.id)
 
             # Complete any existing active trips
             for active_trip in active_trips:
                 active_trip.status = "completed"
                 active_trip.save()
-                
+
                 # Update all remaining stops to completed
                 active_trip.stops.filter(status="pending").update(status="completed")
-                
+
                 # Complete any active log sheets
                 active_log = active_trip.log_sheets.filter(status="active").first()
                 if active_log:
@@ -570,7 +575,7 @@ class TripViewSet(viewsets.ModelViewSet):
                     start_time=timezone.now(),
                     start_location=trip.current_location,
                     start_cycle_hours=trip.current_cycle_hours,
-                    status="active"
+                    status="active",
                 )
 
             response_data = {
@@ -634,22 +639,18 @@ class TripViewSet(viewsets.ModelViewSet):
                     active_log.save()
 
                     # Create a new driving log for the next segment
-                    next_stop = trip.stops.filter(
-                        sequence__gt=stop.sequence
-                    ).first()
+                    next_stop = trip.stops.filter(sequence__gt=stop.sequence).first()
                     if next_stop:
                         LogSheet.objects.create(
                             trip=trip,
                             start_time=timezone.now(),
                             start_location=stop.location,
                             start_cycle_hours=trip.current_cycle_hours,
-                            status="active"
+                            status="active",
                         )
 
             # Check if all stops are completed
-            all_stops_completed = not trip.stops.filter(
-                ~Q(status="completed")
-            ).exists()
+            all_stops_completed = not trip.stops.filter(~Q(status="completed")).exists()
 
             if all_stops_completed:
                 trip.status = "completed"
@@ -803,9 +804,10 @@ class LogSheetViewSet(viewsets.ModelViewSet):
     queryset = LogSheet.objects.all()
     serializer_class = LogSheetSerializer
     permission_classes = [IsAuthenticated]
+    print("SAKJD")
 
     def get_serializer_class(self):
-        if self.action == 'create':
+        if self.action == "create":
             return LogSheetCreateSerializer
         return LogSheetSerializer
 
@@ -813,81 +815,84 @@ class LogSheetViewSet(viewsets.ModelViewSet):
         trip_id = self.kwargs.get("trip_pk")
         if trip_id == "all":
             # Return all logs for the current user's trips
-            return LogSheet.objects.filter(
-                trip__created_by=self.request.user
-            ).order_by("-created_at")
+            return LogSheet.objects.filter(trip__created_by=self.request.user).order_by(
+                "-created_at"
+            )
         elif trip_id:
             # Return logs for a specific trip, ensuring the user has access
             return LogSheet.objects.filter(
-                trip_id=trip_id,
-                trip__created_by=self.request.user
+                trip_id=trip_id, trip__created_by=self.request.user
             )
-        return LogSheet.objects.filter(
-            trip__created_by=self.request.user
-        ).order_by("-created_at")
+        return LogSheet.objects.filter(trip__created_by=self.request.user).order_by(
+            "-created_at"
+        )
 
     def perform_create(self, serializer):
         trip = get_object_or_404(
-            Trip, 
+            Trip,
             pk=self.kwargs.get("trip_pk"),
-            created_by=self.request.user  # Ensure user owns the trip
+            created_by=self.request.user,  # Ensure user owns the trip
         )
-        
+
         # Validate that we're not creating overlapping logs
-        start_time = serializer.validated_data.get('start_time')
-        end_time = serializer.validated_data.get('end_time')
-        
+        start_time = serializer.validated_data.get("start_time")
+        end_time = serializer.validated_data.get("end_time")
+
         if end_time and start_time > end_time:
             raise serializers.ValidationError("Start time cannot be after end time")
-            
+
         # Check for overlapping logs
         overlapping_logs = LogSheet.objects.filter(
             trip=trip,
             start_time__lte=end_time if end_time else timezone.now(),
-            end_time__gte=start_time
+            end_time__gte=start_time,
         ).exists()
-        
+
         if overlapping_logs:
             raise serializers.ValidationError("This log overlaps with an existing log")
-            
+
         serializer.save(trip=trip)
 
     def perform_update(self, serializer):
         # Ensure user owns the log's trip
         if serializer.instance.trip.created_by != self.request.user:
             raise serializers.ValidationError("You can only update your own logs")
-            
+
         # Validate that we're not creating overlapping logs
-        start_time = serializer.validated_data.get('start_time')
-        end_time = serializer.validated_data.get('end_time')
-        
+        start_time = serializer.validated_data.get("start_time")
+        end_time = serializer.validated_data.get("end_time")
+
         if end_time and start_time > end_time:
             raise serializers.ValidationError("Start time cannot be after end time")
-            
+
         # Check for overlapping logs, excluding the current log
-        overlapping_logs = LogSheet.objects.filter(
-            trip=self.get_object().trip,
-            start_time__lte=end_time if end_time else timezone.now(),
-            end_time__gte=start_time
-        ).exclude(id=self.get_object().id).exists()
-        
+        overlapping_logs = (
+            LogSheet.objects.filter(
+                trip=self.get_object().trip,
+                start_time__lte=end_time if end_time else timezone.now(),
+                end_time__gte=start_time,
+            )
+            .exclude(id=self.get_object().id)
+            .exists()
+        )
+
         if overlapping_logs:
             raise serializers.ValidationError("This log overlaps with an existing log")
-            
+
         serializer.save()
 
-    @action(detail=True, methods=['post'])
+    @action(detail=True, methods=["post"])
     def duty_status_change(self, request, pk=None):
         log_sheet = self.get_object()
         # Ensure user owns the log's trip
         if log_sheet.trip.created_by != request.user:
             return Response(
                 {"error": "You can only modify your own logs"},
-                status=status.HTTP_403_FORBIDDEN
+                status=status.HTTP_403_FORBIDDEN,
             )
-            
+
         serializer = DutyStatusChangeCreateSerializer(data=request.data)
-        
+
         if serializer.is_valid():
             duty_status_change = serializer.save(log_sheet=log_sheet)
             return Response(DutyStatusChangeSerializer(duty_status_change).data)
