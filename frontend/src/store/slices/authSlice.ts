@@ -25,7 +25,7 @@ const initialState: AuthState = {
   error: null,
 };
 
-const API_AUTH_URL = import.meta.env.VITE_API_URL || "http://localhost:8000";
+const API_AUTH_URL = import.meta.env.VITE_API_URL? import.meta.env.VITE_API_URL + "/api/auth" : "http://localhost:8000/api/auth";
 
 // Helper function to refresh token
 const refreshAccessToken = async (refreshToken: string) => {

@@ -1,0 +1,13 @@
+.vercel
+*.pyc
+__pycache__/
+db.sqlite3
+.env
+.venv/
+venv/
+staticfiles/
+media/
+
+.vercel
+
+.vercel

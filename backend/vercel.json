@@ -16,8 +16,56 @@
             "dest": "/media/$1"
         },
         {
+            "src": "/api/(.*)",
+            "dest": "trip_logger/wsgi.py",
+            "headers": {
+                "Access-Control-Allow-Origin": "https://frontend-six-kappa-70.vercel.app",
+                "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
+                "Access-Control-Allow-Headers": "Content-Type, Authorization, X-Requested-With, X-CSRFToken",
+                "Access-Control-Allow-Credentials": "true",
+                "Access-Control-Max-Age": "86400",
+                "Content-Type": "application/json",
+                "X-Content-Type-Options": "nosniff"
+            }
+        },
+        {
+            "src": "/admin/(.*)",
+            "dest": "trip_logger/wsgi.py",
+            "headers": {
+                "Access-Control-Allow-Origin": "https://frontend-six-kappa-70.vercel.app",
+                "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
+                "Access-Control-Allow-Headers": "Content-Type, Authorization, X-Requested-With, X-CSRFToken",
+                "Access-Control-Allow-Credentials": "true",
+                "Access-Control-Max-Age": "86400",
+                "Content-Type": "application/json",
+                "X-Content-Type-Options": "nosniff"
+            }
+        },
+        {
             "src": "/(.*)",
-            "dest": "trip_logger/wsgi.py"
+            "dest": "trip_logger/wsgi.py",
+            "headers": {
+                "Access-Control-Allow-Origin": "https://frontend-six-kappa-70.vercel.app",
+                "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
+                "Access-Control-Allow-Headers": "Content-Type, Authorization, X-Requested-With, X-CSRFToken",
+                "Access-Control-Allow-Credentials": "true",
+                "Access-Control-Max-Age": "86400",
+                "Content-Type": "application/json",
+                "X-Content-Type-Options": "nosniff"
+            }
         }
-    ]
+    ],
+    "buildCommand": "pip install -r requirements.txt",
+    "outputDirectory": ".",
+    "env": {
+        "PYTHONPATH": ".",
+        "DJANGO_SETTINGS_MODULE": "trip_logger.settings",
+        "DB_NAME": "postgres",
+        "DB_USER": "postgres.kpgipllxoncjvxuoeeeb",
+        "DB_PASSWORD": "changeme@123",
+        "DB_HOST": "aws-0-eu-central-1.pooler.supabase.com",
+        "DB_PORT": "6543",
+        "DEBUG": "False",
+        "ALLOWED_HOSTS": ".vercel.app,localhost,127.0.0.1"
+    }
 } 

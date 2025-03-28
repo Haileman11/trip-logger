@@ -24,36 +24,68 @@ import logging
 from django.db.models import Q
 from rest_framework import serializers
 from django.utils import timezone
+from django.db import connection
 
 logger = logging.getLogger(__name__)
+logger.info(f"Connecting to database with settings: {connection.settings_dict}")
 
 
 @api_view(["POST"])
 @permission_classes([AllowAny])
 def register(request):
-    logger.info(f"Registration attempt with data: {request.data}")
-    serializer = UserSerializer(data=request.data)
-    if serializer.is_valid():
-        try:
-            user = serializer.save()
-            refresh = RefreshToken.for_user(user)
-            logger.info(f"User registered successfully: {user.email}")
-            return Response(
-                {
-                    "user": serializer.data,
-                    "refresh": str(refresh),
-                    "access": str(refresh.access_token),
-                },
-                status=status.HTTP_201_CREATED,
-            )
-        except Exception as e:
-            logger.error(f"Error during user registration: {str(e)}")
-            return Response(
-                {"error": f"Registration failed: {str(e)}"},
-                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            )
-    logger.error(f"Registration validation failed: {serializer.errors}")
-    return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+    try:
+        logger.info(f"Registration attempt with data: {request.data}")
+        serializer = UserSerializer(data=request.data)
+        if serializer.is_valid():
+            try:
+                # Test database connection before attempting to create user
+                from django.db import connection
+                try:
+                    with connection.cursor() as cursor:
+                        cursor.execute("SELECT 1")
+                except Exception as db_error:
+                    logger.error(f"Database connection error: {str(db_error)}", exc_info=True)
+                    return Response(
+                        {"error": f"Database connection error: {str(db_error)}"},
+                        status=status.HTTP_503_SERVICE_UNAVAILABLE,
+                    )
+                
+                user = serializer.save()
+                refresh = RefreshToken.for_user(user)
+                logger.info(f"User registered successfully: {user.email}")
+                return Response(
+                    {
+                        "user": serializer.data,
+                        "refresh": str(refresh),
+                        "access": str(refresh.access_token),
+                    },
+                    status=status.HTTP_201_CREATED,
+                )
+            except Exception as e:
+                logger.error(f"Error during user registration: {str(e)}", exc_info=True)
+                if "connection" in str(e).lower():
+                    return Response(
+                        {"error": "Database connection error. Please try again later."},
+                        status=status.HTTP_503_SERVICE_UNAVAILABLE,
+                    )
+                elif "unique constraint" in str(e).lower():
+                    return Response(
+                        {"error": "A user with this email or username already exists."},
+                        status=status.HTTP_400_BAD_REQUEST,
+                    )
+                else:
+                    return Response(
+                        {"error": f"Registration failed: {str(e)}"},
+                        status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                    )
+        logger.error(f"Registration validation failed: {serializer.errors}")
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+    except Exception as e:
+        logger.error(f"Unexpected error in registration view: {str(e)}", exc_info=True)
+        return Response(
+            {"error": "An unexpected error occurred. Please try again later."},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        )
 
 
 @api_view(["POST"])
