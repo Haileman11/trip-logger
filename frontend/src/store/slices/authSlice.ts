@@ -1,6 +1,5 @@
 import { createSlice, createAsyncThunk } from '@reduxjs/toolkit';
 import { RootState } from '../../store';
-import { API_AUTH_URL } from '../../config/api';
 
 interface User {
   id: number;
@@ -25,6 +24,8 @@ const initialState: AuthState = {
   loading: false,
   error: null,
 };
+
+const API_AUTH_URL = import.meta.env.VITE_API_URL || "http://localhost:8000";
 
 // Helper function to refresh token
 const refreshAccessToken = async (refreshToken: string) => {
