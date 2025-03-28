@@ -252,22 +252,34 @@ const DailyLogGrid: React.FC<DailyLogGridProps> = ({
     0: '',
   };
 
-  const getTimeLabel = (hour: number) => {
-    if (hour === 0) return 'Midnight';
-    if (hour === 12) return 'Noon';
-    if (hour === 24) return 'Midnight';
-    return `${hour}`;
+  const getTimeLabel = (hour: number, minute: number) => {
+    if (hour === 0 && minute === 0) return 'Midnight';
+    if (hour === 12 && minute === 0) return 'Noon';
+    if (hour === 24 && minute === 0) return 'Midnight';
+    // Only show hour labels for the first 15-minute interval of each hour
+    if (minute === 0) return `${hour}`;
+    return ''; // Return empty string for other 15-minute intervals
   };
 
   const generateTimePoints = () => {
     const timePoints = [];
-    for (let hour = 0; hour < 25; hour++) {
-      timePoints.push({
-        time: getTimeLabel(hour),
-        hour: hour,
-        status: 3
-      });
+    for (let hour = 0; hour < 24; hour++) {
+      for (let minute = 0; minute < 60; minute += 15) {
+        timePoints.push({
+          time: getTimeLabel(hour, minute),
+          hour: hour,
+          minute: minute,
+          status: statusMap['null']
+        });
+      }
     }
+    // Add midnight point for the next day
+    timePoints.push({
+      time: 'Midnight',
+      hour: 24,
+      minute: 0,
+      status: statusMap['null']
+    });
     return timePoints;
   };
 
@@ -281,10 +293,10 @@ const DailyLogGrid: React.FC<DailyLogGridProps> = ({
 
     data.forEach(point => {
       switch (point.status) {
-        case 4: hours.offDuty++; break;
-        case 3: hours.sleeper++; break;
-        case 2: hours.driving++; break;
-        case 1: hours.onDuty++; break;
+        case 4: hours.offDuty += 0.25; break;
+        case 3: hours.sleeper += 0.25; break;
+        case 2: hours.driving += 0.25; break;
+        case 1: hours.onDuty += 0.25; break;
       }
     });
 
@@ -305,19 +317,40 @@ const DailyLogGrid: React.FC<DailyLogGridProps> = ({
       return timeA.getTime() - timeB.getTime();
     });
 
-    // Initialize all time points with the first status (or default to sleeper)
-    const defaultStatus = sortedChanges[0]?.status || 'null';
-    timePoints.forEach(point => {
-      point.status = statusMap[defaultStatus];
-    });
-
     // Apply status changes to time points
     sortedChanges.forEach(change => {
       try {
         const changeTime = new Date(change.time);
         const hour = changeTime.getHours();
-        if (hour >= 0 && hour < 24) {
-          timePoints[hour].status = statusMap[change.status];
+        const minute = changeTime.getMinutes();
+        
+        // Find the closest 15-minute interval
+        const roundedMinute = Math.floor(minute / 15) * 15;
+        const pointIndex = hour * 4 + (roundedMinute / 15);
+        
+        if (pointIndex >= 0 && pointIndex < timePoints.length) {
+          timePoints[pointIndex].status = statusMap[change.status];
+          
+          // If this is a status change, carry it forward until the next change
+          const nextChange = sortedChanges.find(c => 
+            new Date(c.time) > changeTime
+          );
+          
+          if (nextChange) {
+            const nextChangeTime = new Date(nextChange.time);
+            const nextHour = nextChangeTime.getHours();
+            const nextMinute = nextChangeTime.getMinutes();
+            const nextPointIndex = nextHour * 4 + (Math.floor(nextMinute / 15) * 15 / 15);
+            
+            for (let i = pointIndex + 1; i < nextPointIndex && i < timePoints.length; i++) {
+              timePoints[i].status = statusMap[change.status];
+            }
+          } else {
+            // Carry the status until the end of the day
+            for (let i = pointIndex + 1; i < timePoints.length; i++) {
+              timePoints[i].status = statusMap[change.status];
+            }
+          }
         }
       } catch (error) {
         console.error('Error processing duty status change:', error);
@@ -334,7 +367,7 @@ const DailyLogGrid: React.FC<DailyLogGridProps> = ({
       )
     );
     return allRemarks.map(remark => ({
-      time: getTimeLabel(parseInt(remark.time.split(':')[0])),
+      time: getTimeLabel(parseInt(remark.time.split(':')[0]), parseInt(remark.time.split(':')[1])),
       remark: 1,
       location: remark.location
     }));
@@ -427,8 +460,8 @@ const DailyLogGrid: React.FC<DailyLogGridProps> = ({
                 dataKey="status" 
                 stroke="#0066cc" 
                 strokeWidth={2}
-                dot={{ fill: '#0066cc', r: 4 }}
-                activeDot={{ r: 6 }}
+                dot={false}
+                activeDot={false}
               />
             </LineChart>
           </ResponsiveContainer>
@@ -457,7 +490,7 @@ const DailyLogGrid: React.FC<DailyLogGridProps> = ({
         <div className="title">REMARKS</div>
         <RemarksChartContainer>
           <ResponsiveContainer width="100%" height="100%">
-            <ComposedChart data={processRemarksData()}>
+            <ComposedChart  data={processRemarksData()}>
               <XAxis
                 dataKey="time"
                 type="category"

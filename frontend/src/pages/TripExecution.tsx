@@ -268,16 +268,22 @@ const TripExecution: React.FC = () => {
       // Set status to on_duty when confirming arrival
       handleStatusChange("onDuty");
 
-      // Fetch updated trip data
-      await dispatch(fetchTrip(tripId)).unwrap();
+      // Fetch updated trip data and update local state
+      const updatedTrip = await dispatch(fetchTrip(tripId)).unwrap();
+      setTrip(updatedTrip);
 
-      if (currentStopIndex < trip.stops.length - 1) {
-        setCurrentStopIndex((prev) => prev + 1);
-        setTimeRemaining(3600);
-      } else {
-        // Trip completed
+      // Update current stop index based on the updated trip data
+      const newCurrentStopIndex = updatedTrip.stops.findIndex(
+        (stop) => stop.status !== "completed"
+      );
+      setCurrentStopIndex(newCurrentStopIndex);
+
+      if (newCurrentStopIndex === -1) {
+        // All stops are completed, trip is done
         await dispatch(completeTrip(tripId)).unwrap();
         navigate("/dashboard");
+      } else {
+        setTimeRemaining(3600);
       }
     } catch (error) {
       console.error("Failed to update stop status:", error);
