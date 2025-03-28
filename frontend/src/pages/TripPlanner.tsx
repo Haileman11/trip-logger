@@ -23,7 +23,7 @@ import { DialogFooter } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { useNavigate } from "react-router-dom";
 import { useAppDispatch } from "@/hooks/useAppDispatch";
-import type { LocationInputModel } from "@/types";
+import type { LocationInputModel, LogSheet } from "@/types";
 
 import { leafletIcons } from "../utils/leaflet-icons";
 import { fetchLatestCycleHours } from "@/store/slices/logSlice";
@@ -695,12 +695,21 @@ const LocationInput = ({
             onChange={(e) => onChange(index, "longitude", e.target.value)}
           />
         </div>
-        <div>
+        <div className="flex gap-2">
           <button
             className="flex items-center justify-center px-4 py-2 border border-yellow-500 text-yellow-600 rounded-md hover:bg-yellow-50"
             onClick={() => onSelect(location.slug)}
           >
             Select on Map
+          </button>
+          <button
+            className="flex items-center justify-center px-4 py-2 border border-red-500 text-red-600 rounded-md hover:bg-red-50"
+            onClick={() => {
+              onChange(index, "latitude", "0");
+              onChange(index, "longitude", "0");
+            }}
+          >
+            Reset
           </button>
         </div>
       </div>

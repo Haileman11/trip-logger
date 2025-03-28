@@ -45,7 +45,7 @@ const StopStatusUpdate: React.FC<StopStatusUpdateProps> = ({
   return (
     <div className="space-y-4">
       <div className="flex items-center space-x-3">
-        {getStopIcon(stop.stop_type)}
+        {/* {getStopIcon(stop.stop_type)} */}
         <div>
           <h3 className="text-lg font-semibold">
             {`${stop.stop_type?.toString().charAt(0).toUpperCase() + stop.stop_type?.toString().slice(1)} Stop`}
@@ -54,7 +54,7 @@ const StopStatusUpdate: React.FC<StopStatusUpdateProps> = ({
         </div>
       </div>
 
-      {stop.distance_from_last_stop && (
+      {stop.distance_from_last_stop !== 0 && (
         <div className="text-sm text-gray-600">
           Distance from last stop: {Math.round(stop.distance_from_last_stop)} miles
         </div>

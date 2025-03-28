@@ -161,24 +161,30 @@ const TripDetails = () => {
   }
   function handleStartTrip(event: React.MouseEvent<HTMLButtonElement>): void {
     console.log("Starting trip");
-    
+
     // First check if there are any active trips
     const checkActiveTrips = async () => {
       try {
-        const response = await fetch('/api/trips/', {
+        const response = await fetch("/api/trips/", {
           headers: {
-            'Authorization': `Bearer ${localStorage.getItem('access_token')}`
-          }
+            Authorization: `Bearer ${localStorage.getItem("access_token")}`,
+          },
         });
-        
-        if (!response.ok) throw new Error('Failed to fetch trips');
-        
+
+        if (!response.ok) throw new Error("Failed to fetch trips");
+
         const trips = await response.json();
-        const activeTrips = trips.filter((trip: any) => trip.status === 'in_progress');
-        
+        const activeTrips = trips.filter(
+          (trip: any) => trip.status === "in_progress"
+        );
+
         if (activeTrips.length > 0) {
           // Show warning to user
-          if (window.confirm('You already have an active trip. Starting this trip will complete the active trip. Do you want to continue?')) {
+          if (
+            window.confirm(
+              "You already have an active trip. Starting this trip will complete the active trip. Do you want to continue?"
+            )
+          ) {
             // User confirmed, proceed with starting the trip
             dispatch(startTrip(tripId!));
             navigate("/trip/" + tripId + "/live");
@@ -189,7 +195,7 @@ const TripDetails = () => {
           navigate("/trip/" + tripId + "/live");
         }
       } catch (error) {
-        console.error('Error checking active trips:', error);
+        console.error("Error checking active trips:", error);
         // If there's an error checking active trips, proceed with starting the trip
         dispatch(startTrip(tripId!));
         navigate("/trip/" + tripId + "/live");
@@ -200,202 +206,224 @@ const TripDetails = () => {
   }
 
   return (
-    <div className="max-w-7xl mx-auto p-6">
+    <div className="max-w-7xl mx-auto p-6 space-y-6">
       {error && (
-        <div className="bg-red-50 border border-red-200 text-red-600 px-4 py-3 rounded-md mb-4">
+        <div className="bg-red-50 border border-red-200 text-red-600 px-4 py-3 rounded-md">
           {error}
         </div>
       )}
+
       {/* Header */}
-      <div className="flex items-center justify-between mb-8">
-        <h1 className="text-2xl font-bold text-gray-900">Trip Details</h1>
-      </div>
-      {trip && (
-        <div className="bg-white rounded-lg shadow-lg p-4">
-          <div className="flex justify-between items-center">
-            <div>
-              <h2 className="text-xl font-bold">
-                Trip Status: <Badge>{trip?.status.toUpperCase()}</Badge>
-              </h2>
-              <p className="text-sm text-gray-600">
-                {/* Trip ID: {trip?.id} | Current Stop: {trip?.stops.findIndex((stop)=>stop.status == "pending")|| trip?.stops.length } of {trip?.stops.length} */}
-                From{" "}
-                <span className="font-bold">
-                  {trip?.route?.routes?.[0]?.legs[0].summary}
-                </span>{" "}
-                to{" "}
-                <span className="font-bold">
-                  {
-                    trip?.route?.routes?.[0]?.legs[
-                      trip?.route?.routes?.[0]?.legs.length - 1
-                    ].summary
-                  }
-                </span>
-              </p>
-            </div>
-            {trip?.status === "planned" && (
-              <button
-                onClick={handleStartTrip}
-                className="bg-green-600 text-white px-6 py-2 rounded-lg hover:bg-green-700"
-              >
-                Start Trip
-              </button>
-            )}
-            {trip?.status === "in_progress" && (
-              <Link
-                to={`/trip/${tripId}/live`}
-                className="bg-green-600 text-white px-6 py-2 rounded-lg hover:bg-green-700"
-              >
-                Log Trip
-              </Link>
-            )}
-          </div>
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-3xl font-bold text-gray-900">Trip Details</h1>
+          <p className="text-gray-500 mt-1">View and manage trip information</p>
         </div>
-      )}
+      </div>
+
       {trip && (
-        <div className="flex md:flex-col gap-8">
-          {/* Right Column - Map */}
-          <div className="bg-white rounded-lg shadow-sm overflow-hidden">
-            <div className="h-[400px]">
-              <MapContainer
-                center={defaultCenter}
-                zoom={4}
-                className="h-full w-full"
-                style={{ zIndex: 1 }}
-                scrollWheelZoom={false}
-              >
-                <TileLayer
-                  attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
-                  url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-                />
-                <BoundsUpdater
-                  currentLocation={trip.current_location}
-                  pickupLocation={trip.pickup_location}
-                  dropoffLocation={trip.dropoff_location}
-                />
-                {/* <MapClickHandler onLocationSelect={handleLocationSelect} /> */}
-
-                {/* Update RoutePolyline rendering */}
-                {trip.route?.routes?.[0]?.geometry && (
-                  <RoutePolyline
-                    geometry={
-                      trip.route?.routes?.[0]?.geometry as GeoJSONLineString
+        <>
+          {/* Status Card */}
+          <div className="bg-white rounded-lg shadow-sm p-6">
+            <div className="flex justify-between items-center">
+              <div>
+                <h2 className="text-xl font-semibold text-gray-900 mb-2">
+                  Trip Status:{" "}
+                  <Badge className="ml-2">{trip?.status.toUpperCase()}</Badge>
+                </h2>
+                <p className="text-gray-600">
+                  From{" "}
+                  <span className="font-medium">
+                    {trip?.route?.routes?.[0]?.legs[0].summary}
+                  </span>{" "}
+                  to{" "}
+                  <span className="font-medium">
+                    {
+                      trip?.route?.routes?.[0]?.legs[
+                        trip?.route?.routes?.[0]?.legs.length - 1
+                      ].summary
                     }
-                  />
-                )}
+                  </span>
+                </p>
+              </div>
+              {trip?.status === "planned" && (
+                <button
+                  onClick={handleStartTrip}
+                  className="bg-green-600 text-white px-6 py-2 rounded-lg hover:bg-green-700 transition-colors"
+                >
+                  Start Trip
+                </button>
+              )}
+              {trip?.status === "in_progress" && (
+                <Link
+                  to={`/trip/${tripId}/live`}
+                  className="bg-green-600 text-white px-6 py-2 rounded-lg hover:bg-green-700 transition-colors"
+                >
+                  Log Trip
+                </Link>
+              )}
+            </div>
+          </div>
 
-                {/* Current Location Marker */}
-                {trip.current_location.latitude !== 0 &&
-                  trip.current_location.longitude !== 0 && (
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            {/* Map Section */}
+            <div className="lg:col-span-2 bg-white rounded-lg shadow-sm overflow-hidden">
+              <div className="h-[600px]">
+                <MapContainer
+                  center={defaultCenter}
+                  zoom={4}
+                  className="h-full w-full"
+                  style={{ zIndex: 1 }}
+                  scrollWheelZoom={false}
+                >
+                  <TileLayer
+                    attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+                    url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+                  />
+                  <BoundsUpdater
+                    locations={[
+                      trip.current_location,
+                      trip.pickup_location,
+                      trip.dropoff_location,
+                      trip.fuel_stop!,
+                    ]}
+                  />
+                  {trip.route?.routes?.[0]?.geometry && (
+                    <RoutePolyline
+                      geometry={
+                        trip.route?.routes?.[0]?.geometry as GeoJSONLineString
+                      }
+                    />
+                  )}
+
+                  {/* Current Location Marker */}
+                  {trip.current_location.latitude !== 0 &&
+                    trip.current_location.longitude !== 0 && (
+                      <LocationMarker
+                        position={[
+                          trip.current_location.latitude,
+                          trip.current_location.longitude,
+                        ]}
+                        icon={leafletIcons.defaultIcon}
+                      >
+                        <Popup>
+                          <div className="p-2">
+                            <div className="font-semibold">
+                              Current Location
+                            </div>
+                            <div className="text-sm text-gray-600">Stop #1</div>
+                          </div>
+                        </Popup>
+                      </LocationMarker>
+                    )}
+
+                  {/* Stop Markers */}
+                  {trip.stops.map((stop: Stop, index: number) => (
                     <LocationMarker
+                      key={index}
                       position={[
-                        trip.current_location.latitude,
-                        trip.current_location.longitude,
+                        stop.location.latitude,
+                        stop.location.longitude,
                       ]}
-                      icon={leafletIcons.defaultIcon}
+                      icon={
+                        stop.stop_type === "pickup"
+                          ? leafletIcons.greenIcon
+                          : stop.stop_type === "dropoff"
+                          ? leafletIcons.redIcon
+                          : stop.stop_type === "fuel"
+                          ? leafletIcons.yellowIcon
+                          : stop.stop_type === "rest"
+                          ? leafletIcons.blueIcon
+                          : leafletIcons.defaultIcon
+                      }
                     >
                       <Popup>
                         <div className="p-2">
-                          <div className="font-semibold">Current Location</div>
-                          <div className="text-sm text-gray-600">Stop #1</div>
+                          <div className="font-semibold">
+                            {stop.stop_type.toUpperCase()}
+                          </div>
+                          <div className="text-sm text-gray-600">
+                            {stop.summary}
+                          </div>
+                          <div className="text-sm text-gray-600">
+                            Stop {stop.sequence}
+                          </div>
+                          <div className="text-sm text-gray-600">
+                            {stop.location.latitude}, {stop.location.longitude}
+                          </div>
                         </div>
                       </Popup>
                     </LocationMarker>
-                  )}
-                {trip.stops.map((stop: Stop, index: number) => (
-                  <LocationMarker
-                    key={index}
-                    position={[stop.location.latitude, stop.location.longitude]}
-                    icon={
-                      stop.stop_type == "pickup"
-                        ? leafletIcons.greenIcon
-                        : stop.stop_type == "dropoff"
-                        ? leafletIcons.redIcon
-                        : stop.stop_type == "fuel"
-                        ? leafletIcons.yellowIcon
-                        : stop.stop_type == "rest"
-                        ? leafletIcons.blueIcon
-                        : leafletIcons.defaultIcon
-                    }
-                  >
-                    <Popup>
-                      <div className="p-2">
-                        <div className="font-semibold">
+                  ))}
+                </MapContainer>
+              </div>
+            </div>
+
+            {/* Route Timeline */}
+            <div className="bg-white rounded-lg shadow-sm p-6 overflow-scroll h-[600px]">
+              <h2 className="text-xl font-semibold text-gray-900 mb-6">
+                Route Timeline
+              </h2>
+              <div className="space-y-6">
+                {trip.stops.map((stop: Stop, index: number) => {
+                  const leg = trip.route?.routes?.[0]?.legs[index];
+                  if (!leg) return null;
+                  const currentStopIndex = trip.stops.findIndex(
+                    (stop) => stop.status !== "completed"
+                  );
+                  return (
+                    <div
+                      key={stop.id}
+                      className={`flex p-4 rounded-lg border ${
+                        index === currentStopIndex
+                          ? "border-blue-500 bg-blue-50"
+                          : stop.status === "completed"
+                          ? "border-green-500 bg-green-50"
+                          : stop.status === "skipped"
+                          ? "border-red-500 bg-red-50"
+                          : "border-gray-200"
+                      }`}
+                    >
+                      <div className="flex-shrink-0">
+                        <div className="w-12 h-12 rounded-full flex items-center justify-center bg-gray-50">
+                          {createStopIcon(stop.stop_type)}
+                        </div>
+                      </div>
+                      <div className="flex-1">
+                        <p className="font-medium text-gray-900">
                           {stop.stop_type.toUpperCase()}
-                        </div>
-                        <div className="text-sm text-gray-600">
-                          {stop.summary}
-                        </div>
-                        <div className="text-sm text-gray-600">
-                          Stop {stop.sequence}
-                        </div>
-                        <div className="text-sm text-gray-600">
-                          {stop.location.latitude}, {stop.location.longitude}
+                        </p>
+                        <p className="text-gray-600">{leg.summary}</p>
+                        <div className="mt-2 space-y-1">
+                          <p className="text-sm text-gray-500">
+                            {formatDurationfromMinutes(
+                              stop.cycle_hours_at_stop * 60
+                            )}{" "}
+                            cycle hours
+                          </p>
+                          <p className="text-sm text-gray-500">
+                            Arriving in {formatDuration(leg.duration)}
+                          </p>
+                          <p className="text-sm text-gray-500">
+                            {formatDistance(leg.distance)}
+                          </p>
                         </div>
                       </div>
-                    </Popup>
-                  </LocationMarker>
-                ))}
-              </MapContainer>
-            </div>
-            {/* <p className="p-4 text-sm text-gray-500">
-            {isSelectingFuelStop
-              ? 'Click on the map to add a fuel stop location'
-              : 'Click on the map to set pickup (green) and dropoff (red) locations. Click on a marker to remove it.'}
-          </p> */}
-          </div>
-        </div>
-      )}
-
-      {/* Bottom Sections */}
-      {trip && routeData && (
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mt-8">
-          {/* Route Timeline */}
-          <div className="bg-white rounded-lg shadow-sm p-6">
-            <h2 className="text-lg font-semibold mb-4">Route Timeline</h2>
-            <div className="space-y-6">
-              {trip.stops.map((stop: Stop, index: number) => {
-                // Find the corresponding leg for this stop
-                const leg = trip.route?.routes?.[0]?.legs[index];
-                if (!leg) return null;
-
-                return (
-                  <div key={index} className="flex items-start space-x-3">
-                    <div className="flex-shrink-0">
-                      <div className="w-16 h-16 rounded-full flex flex-col items-center justify-center text-sm font-medium text-gray-600">
-                        {createStopIcon(stop.stop_type)}
-                      </div>
                     </div>
-                    <div>
-                      <p className="font-sm text-gray-900">
-                        {stop.stop_type.toUpperCase()}
-                      </p>
-                      <p className="font-medium text-gray-900">
-                        {leg.summary}
-                      </p>
-                      <p className="font-medium text-gray-900">
-                        {formatDurationfromMinutes(
-                          stop.cycle_hours_at_stop * 60
-                        )}{" "}
-                        cycle hours
-                      </p>
-                      <p className="font-medium text-gray-900">
-                        Arriving in {formatDuration(leg.duration)}
-                      </p>
-                      <p className="text-sm text-gray-500">
-                        {formatDistance(leg.distance)}
-                      </p>
-                    </div>
-                  </div>
-                );
-              })}
+                  );
+                })}
+              </div>
             </div>
           </div>
+
+          {/* Bottom Sections */}
 
           {/* ELD Logs */}
           <div className="bg-white rounded-lg shadow-sm p-6">
-            <h2 className="text-lg font-semibold mb-4">Estimated ELD Logs</h2>
-            <div className="space-y-4">
+            <h2 className="text-xl font-semibold text-gray-900 mb-6">
+              Estimated ELD Logs
+            </h2>
+            <div className="space-y-6">
               {(() => {
                 const drivingTime = trip.route?.routes?.[0]?.duration || 0;
                 const onDutyTime =
@@ -421,15 +449,15 @@ const TripDetails = () => {
                 return (
                   <>
                     <div>
-                      <div className="flex justify-between items-center mb-1">
-                        <span className="text-sm text-gray-600">
+                      <div className="flex justify-between items-center mb-2">
+                        <span className="text-sm font-medium text-gray-700">
                           Driving Time
                         </span>
-                        <span className="text-sm font-medium">
+                        <span className="text-sm font-medium text-gray-900">
                           {formatDuration(drivingTime)}
                         </span>
                       </div>
-                      <div className="w-full bg-gray-200 rounded-full h-2">
+                      <div className="w-full bg-gray-100 rounded-full h-2">
                         <div
                           className="bg-green-500 h-2 rounded-full"
                           style={{ width: `${drivingPercentage}%` }}
@@ -437,13 +465,15 @@ const TripDetails = () => {
                       </div>
                     </div>
                     <div>
-                      <div className="flex justify-between items-center mb-1">
-                        <span className="text-sm text-gray-600">On Duty</span>
-                        <span className="text-sm font-medium">
+                      <div className="flex justify-between items-center mb-2">
+                        <span className="text-sm font-medium text-gray-700">
+                          On Duty
+                        </span>
+                        <span className="text-sm font-medium text-gray-900">
                           {formatDuration(onDutyTime)}
                         </span>
                       </div>
-                      <div className="w-full bg-gray-200 rounded-full h-2">
+                      <div className="w-full bg-gray-100 rounded-full h-2">
                         <div
                           className="bg-yellow-500 h-2 rounded-full"
                           style={{ width: `${onDutyPercentage}%` }}
@@ -451,13 +481,15 @@ const TripDetails = () => {
                       </div>
                     </div>
                     <div>
-                      <div className="flex justify-between items-center mb-1">
-                        <span className="text-sm text-gray-600">Rest Time</span>
-                        <span className="text-sm font-medium">
+                      <div className="flex justify-between items-center mb-2">
+                        <span className="text-sm font-medium text-gray-700">
+                          Rest Time
+                        </span>
+                        <span className="text-sm font-medium text-gray-900">
                           {formatDuration(restTime)}
                         </span>
                       </div>
-                      <div className="w-full bg-gray-200 rounded-full h-2">
+                      <div className="w-full bg-gray-100 rounded-full h-2">
                         <div
                           className="bg-blue-500 h-2 rounded-full"
                           style={{ width: `${restPercentage}%` }}
@@ -471,80 +503,106 @@ const TripDetails = () => {
           </div>
 
           {/* Trip Logs Section */}
-      <div className="bg-white rounded-lg shadow-lg p-4">
-        <h2 className="text-xl font-bold mb-4">Trip Logs</h2>
-        <div className="space-y-2 max-h-[300px] overflow-y-auto">
-          {trip?.log_sheets?.map((log: LogSheet) => (
-            <div key={log.id} className="flex items-center justify-between p-2 bg-gray-50 rounded">
-              <div className="flex items-center space-x-2">
-                <span className={`px-2 py-1 rounded text-sm ${
-                  log.status === 'active' ? 'bg-green-100 text-green-800' :
-                  log.status === 'completed' ? 'bg-blue-100 text-blue-800' :
-                  'bg-gray-100 text-gray-800'
-                }`}>
-                  {log.status.toUpperCase()}
-                </span>
-                <span className="text-sm text-gray-600">
-                  {new Date(log.start_time).toLocaleString()}
-                  {log.end_time && ` → ${new Date(log.end_time).toLocaleString()}`}
-                </span>
-              </div>
-              <div className="text-sm text-gray-500">
-                <span>Cycle Hours: {log.start_cycle_hours}</span>
-                {log.end_cycle_hours && ` → ${formatDurationfromMinutes(log.end_cycle_hours!*60)}`}
-              </div>
+          <div className="bg-white rounded-lg shadow-sm p-6">
+            <h2 className="text-xl font-semibold text-gray-900 mb-6">
+              Trip Logs
+            </h2>
+            <div className="space-y-3 max-h-[400px] overflow-y-auto">
+              {trip?.log_sheets?.map((log: LogSheet) => (
+                <div
+                  key={log.id}
+                  className="flex items-center justify-between p-3 bg-gray-50 rounded-lg"
+                >
+                  <div className="flex items-center space-x-3">
+                    <span
+                      className={`px-2 py-1 rounded text-sm font-medium ${
+                        log.status === "active"
+                          ? "bg-green-100 text-green-800"
+                          : log.status === "completed"
+                          ? "bg-blue-100 text-blue-800"
+                          : "bg-gray-100 text-gray-800"
+                      }`}
+                    >
+                      {log.status.toUpperCase()}
+                    </span>
+                    <div className="text-sm text-gray-600">
+                      <div>{new Date(log.start_time).toLocaleString()}</div>
+                      {log.end_time && (
+                        <div className="text-gray-500">
+                          → {new Date(log.end_time).toLocaleString()}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                  <div className="text-sm text-gray-500">
+                    <div>Cycle Hours: {log.start_cycle_hours}</div>
+                    {log.end_cycle_hours && (
+                      <div>
+                        → {formatDurationfromMinutes(log.end_cycle_hours! * 60)}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              ))}
+              {(!trip?.log_sheets || trip.log_sheets.length === 0) && (
+                <div className="text-center text-gray-500 py-4">
+                  No logs available for this trip
+                </div>
+              )}
             </div>
-          ))}
-          {(!trip?.log_sheets || trip.log_sheets.length === 0) && (
-            <div className="text-center text-gray-500 py-4">
-              No logs available for this trip
-            </div>
-          )}
-        </div>
-      </div>
+          </div>
+
           {/* Trip Summary */}
           <div className="bg-white rounded-lg shadow-sm p-6">
-            <h2 className="text-lg font-semibold mb-4">Planned Trip Summary</h2>
+            <h2 className="text-xl font-semibold text-gray-900 mb-6">
+              Trip Summary
+            </h2>
             <div className="space-y-4">
               <div className="flex items-center justify-between">
-                <div className="flex items-center space-x-2">
+                <div className="flex items-center space-x-3">
                   <FaTruck className="w-5 h-5 text-gray-400" />
                   <span className="text-gray-600">Total Distance</span>
                 </div>
-                <span className="font-medium">
+                <span className="font-medium text-gray-900">
                   {formatDistance(trip.route?.routes?.[0]?.distance!)}
                 </span>
               </div>
               <div className="flex items-center justify-between">
-                <div className="flex items-center space-x-2">
+                <div className="flex items-center space-x-3">
                   <BiTimeFive className="w-5 h-5 text-gray-400" />
                   <span className="text-gray-600">Est. Duration</span>
                 </div>
-                <span className="font-medium">
+                <span className="font-medium text-gray-900">
                   {formatDuration(trip.route?.routes?.[0]?.duration!)}
                 </span>
               </div>
               <div className="flex items-center justify-between">
-                <div className="flex items-center space-x-2">
+                <div className="flex items-center space-x-3">
                   <FaGasPump className="w-5 h-5 text-gray-400" />
                   <span className="text-gray-600">Fuel Stops</span>
                 </div>
-                <span className="font-medium">
-                  {trip.stops.filter((stop) => stop.stop_type == "fuel").length}
+                <span className="font-medium text-gray-900">
+                  {
+                    trip.stops.filter((stop) => stop.stop_type === "fuel")
+                      .length
+                  }
                 </span>
               </div>
               <div className="flex items-center justify-between">
-                <div className="flex items-center space-x-2">
+                <div className="flex items-center space-x-3">
                   <FaBed className="w-5 h-5 text-gray-400" />
                   <span className="text-gray-600">Rest Stops</span>
                 </div>
-                <span className="font-medium">
-                  {trip.stops.filter((stop) => stop.stop_type == "rest").length}
+                <span className="font-medium text-gray-900">
+                  {
+                    trip.stops.filter((stop) => stop.stop_type === "rest")
+                      .length
+                  }
                 </span>
               </div>
             </div>
           </div>
-        </div>
+        </>
       )}
     </div>
   );
